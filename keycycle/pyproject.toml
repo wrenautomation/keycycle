@@ -10,10 +10,11 @@ authors = [
 ]
 description = "A thread-safe key rotation and rate limiting manager for API keys."
 readme = "README.md"
+license = { file = "LICENSE.md" }
 requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
     "Development Status :: 3 - Alpha",
 ]
