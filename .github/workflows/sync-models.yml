@@ -41,7 +41,7 @@ jobs:
       - name: Test
         if: steps.changed.outputs.yes
         working-directory: keycycle
-        run: pytest -q -m "not integration and not slow" --timeout 60
+        run: pytest -q tests/test_*.py -m "not integration and not slow" --timeout 60
 
       - name: Bump, commit, publish
         if: steps.changed.outputs.yes
