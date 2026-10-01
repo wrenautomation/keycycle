@@ -145,6 +145,14 @@ wrapper's own setting is off. Asking for it with no database configured raises
 *   **Persistence:** Logs usage to SQL database for historical tracking.
 *   **Thread-Safe:** Safe for concurrent usage.
 
+## Model limits stay current
+
+The YAMLs in `keycycle/keycycle/config/models/` are generated. `scripts/sync_models.py` reads each provider's own page (Groq and Cerebras rate-limit docs, OpenRouter's free model list) and the Gemini models API, which prunes retired Gemini models. The `sync-models` workflow runs it daily; on any change it bumps the patch version and publishes to PyPI.
+
+Gemini free-tier limits are only in AI Studio, behind a login, so they refresh locally: `GEMINI_API_KEY=... scripts/gemini_limits.sh` (autobrowse reads the table), then push. The push publishes too.
+
+Repo secrets: `PYPI_TOKEN`, `GEMINI_API_KEY`.
+
 ## Development and Publishing
 
 The project includes scripts to automate the build and release process to PyPI.

@@ -1,14 +1,17 @@
+# Cohere limits per key tier (COHERE_TIER env). Source: https://docs.cohere.com/docs/rate-limits.md
+# Trial keys: 20 req/min per chat model and 1,000 calls a month in all. keycycle has
+# no monthly window, so the day cap is set to the month's total.
 free:
   requests_per_minute: 20
-  requests_per_hour: 1200
-  requests_per_day: 72000
+  requests_per_hour: 1000
+  requests_per_day: 1000
 
 pro:
   requests_per_minute: 500
   requests_per_hour: 30000
-  requests_per_day: 1440000
+  requests_per_day: 720000
 
 enterprise:
   requests_per_minute: 1000
   requests_per_hour: 60000
-  requests_per_day: 2880000
+  requests_per_day: 1440000

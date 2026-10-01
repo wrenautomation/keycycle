@@ -1,0 +1,61 @@
+# Daily: regenerate the model YAMLs from the providers' own pages, and when
+# anything changed, bump the patch version, commit, and publish to PyPI.
+# A push that touches the YAMLs (e.g. a local Gemini scrape) publishes too.
+name: sync-models
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["keycycle/keycycle/config/models/**"]
+
+concurrency: sync-models
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "keycycle[test]" build twine
+
+      - name: Sync model YAMLs
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/sync_models.py
+
+      - name: Decide whether to release
+        id: changed
+        run: |
+          if [ -n "$(git status --porcelain keycycle/keycycle/config/models)" ] || [ "${{ github.event_name }}" = push ]; then
+            echo "yes=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test
+        if: steps.changed.outputs.yes
+        working-directory: keycycle
+        run: pytest -q -m "not integration and not slow" --timeout 60
+
+      - name: Bump, commit, publish
+        if: steps.changed.outputs.yes
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          v=$(sed -nE 's/^version = "([0-9]+)\.([0-9]+)\.([0-9]+)"/\1.\2.\3/p' keycycle/pyproject.toml)
+          next="${v%.*}.$(( ${v##*.} + 1 ))"
+          sed -i "s/^version = \"$v\"/version = \"$next\"/" keycycle/pyproject.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A keycycle/pyproject.toml keycycle/keycycle/config/models
+          git commit -m "$next: model YAMLs synced from provider sources"
+          git push
+          cp README.md keycycle/README.md
+          cd keycycle && python -m build && twine upload --non-interactive --skip-existing dist/*
