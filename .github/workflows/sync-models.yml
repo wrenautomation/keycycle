@@ -1,6 +1,6 @@
 # Daily: regenerate the model YAMLs from the providers' own pages, and when
 # anything changed, bump the patch version, commit, and publish to PyPI.
-# A push that touches the YAMLs (e.g. a local Gemini scrape) publishes too.
+# A push that touches the YAMLs (e.g. a local Gemini scrape) or a manual run always publishes.
 name: sync-models
 
 on:
@@ -34,7 +34,7 @@ jobs:
       - name: Decide whether to release
         id: changed
         run: |
-          if [ -n "$(git status --porcelain keycycle/keycycle/config/models)" ] || [ "${{ github.event_name }}" = push ]; then
+          if [ -n "$(git status --porcelain keycycle/keycycle/config/models)" ] || [ "${{ github.event_name }}" != schedule ]; then
             echo "yes=1" >> "$GITHUB_OUTPUT"
           fi
 
