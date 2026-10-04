@@ -43,11 +43,11 @@ openai/gpt-oss-20b:
   tokens_per_hour: 200000
   tokens_per_day: 200000
 openai/gpt-oss-safeguard-20b:
-  requests_per_minute: 30
-  requests_per_hour: 1000
+  requests_per_minute: 5
+  requests_per_hour: 300
   requests_per_day: 1000
-  tokens_per_minute: 8000
-  tokens_per_hour: 200000
+  tokens_per_minute: 2000
+  tokens_per_hour: 120000
   tokens_per_day: 200000
 qwen/qwen3.8-27b:
   requests_per_minute: 30
