@@ -2,8 +2,10 @@
 Integration tests for environment-based MultiProviderWrapper initialization.
 Tests wrapper creation, model retrieval, and stats reporting for multiple providers.
 """
-import pytest
+
 from pathlib import Path
+
+import pytest
 
 from keycycle import MultiProviderWrapper
 
@@ -19,10 +21,10 @@ class TestEnvironmentIntegration:
         """Create Cerebras wrapper from environment."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='cerebras',
-                default_model_id='gpt-oss-120b',
+                provider="cerebras",
+                default_model_id="gpt-oss-120b",
                 env_file=ENV_PATH,
-                temperature=0.7
+                temperature=0.7,
             )
             yield wrapper
             wrapper.manager.stop()
@@ -34,8 +36,8 @@ class TestEnvironmentIntegration:
         """Create Groq wrapper from environment."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='groq',
-                default_model_id='llama-3.3-70b-versatile',
+                provider="groq",
+                default_model_id="llama-3.3-70b-versatile",
                 env_file=ENV_PATH,
                 top_p=0.95,
             )
@@ -49,10 +51,7 @@ class TestEnvironmentIntegration:
         """Create Gemini wrapper from environment."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='gemini',
-                default_model_id='gemini-2.5-flash',
-                env_file=ENV_PATH,
-                top_k=10
+                provider="gemini", default_model_id="gemini-2.5-flash", env_file=ENV_PATH, top_k=10
             )
             yield wrapper
             wrapper.manager.stop()
@@ -64,9 +63,9 @@ class TestEnvironmentIntegration:
         """Create OpenRouter wrapper from environment."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='openrouter',
-                default_model_id='nvidia/nemotron-nano-12b-v2-vl:free',
-                env_file=ENV_PATH
+                provider="openrouter",
+                default_model_id="nvidia/nemotron-nano-12b-v2-vl:free",
+                env_file=ENV_PATH,
             )
             yield wrapper
             wrapper.manager.stop()
@@ -77,35 +76,35 @@ class TestEnvironmentIntegration:
     def test_cerebras_wrapper_initialization(self, cerebras_wrapper):
         """Test Cerebras wrapper initializes correctly."""
         assert cerebras_wrapper is not None
-        assert cerebras_wrapper.provider == 'cerebras'
-        assert cerebras_wrapper.default_model_id == 'gpt-oss-120b'
+        assert cerebras_wrapper.provider == "cerebras"
+        assert cerebras_wrapper.default_model_id == "gpt-oss-120b"
 
     @pytest.mark.integration
     def test_groq_wrapper_initialization(self, groq_wrapper):
         """Test Groq wrapper initializes correctly."""
         assert groq_wrapper is not None
-        assert groq_wrapper.provider == 'groq'
-        assert groq_wrapper.default_model_id == 'llama-3.3-70b-versatile'
+        assert groq_wrapper.provider == "groq"
+        assert groq_wrapper.default_model_id == "llama-3.3-70b-versatile"
 
     @pytest.mark.integration
     def test_gemini_wrapper_initialization(self, gemini_wrapper):
         """Test Gemini wrapper initializes correctly."""
         assert gemini_wrapper is not None
-        assert gemini_wrapper.provider == 'gemini'
-        assert gemini_wrapper.default_model_id == 'gemini-2.5-flash'
+        assert gemini_wrapper.provider == "gemini"
+        assert gemini_wrapper.default_model_id == "gemini-2.5-flash"
 
     @pytest.mark.integration
     def test_openrouter_wrapper_initialization(self, openrouter_wrapper):
         """Test OpenRouter wrapper initializes correctly."""
         assert openrouter_wrapper is not None
-        assert openrouter_wrapper.provider == 'openrouter'
+        assert openrouter_wrapper.provider == "openrouter"
 
     @pytest.mark.integration
     def test_cerebras_model_retrieval(self, cerebras_wrapper):
         """Test getting a model from Cerebras wrapper."""
         model = cerebras_wrapper.get_model(estimated_tokens=500, wait=True, timeout=20)
         assert model is not None
-        assert hasattr(model, 'api_key')
+        assert hasattr(model, "api_key")
         assert model.api_key is not None
 
     @pytest.mark.integration
@@ -113,7 +112,7 @@ class TestEnvironmentIntegration:
         """Test getting a model from Groq wrapper."""
         model = groq_wrapper.get_model(estimated_tokens=500, wait=True, timeout=20)
         assert model is not None
-        assert hasattr(model, 'api_key')
+        assert hasattr(model, "api_key")
         assert model.api_key is not None
 
     @pytest.mark.integration
@@ -121,7 +120,7 @@ class TestEnvironmentIntegration:
         """Test getting a model from Gemini wrapper."""
         model = gemini_wrapper.get_model(estimated_tokens=500, wait=True, timeout=20)
         assert model is not None
-        assert hasattr(model, 'api_key')
+        assert hasattr(model, "api_key")
         assert model.api_key is not None
 
     @pytest.mark.integration
@@ -129,7 +128,7 @@ class TestEnvironmentIntegration:
         """Test getting a model from OpenRouter wrapper."""
         model = openrouter_wrapper.get_model(estimated_tokens=500, wait=True, timeout=20)
         assert model is not None
-        assert hasattr(model, 'api_key')
+        assert hasattr(model, "api_key")
         assert model.api_key is not None
 
     @pytest.mark.integration

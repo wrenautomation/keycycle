@@ -1,24 +1,22 @@
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
-import sys
-import os
 
 # Add project root to sys.path to ensure imports work
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
-    from keycycle.config.dataclasses import RateLimits, KeyLimitOverride
-    from keycycle.legacy_multi_provider_wrapper import MultiProviderWrapper
-    from keycycle.key_rotation.rotation_manager import RotatingKeyManager
+    from keycycle.config.dataclasses import RateLimits
     from keycycle.config.enums import RateLimitStrategy
-    from keycycle.core.utils import get_key_suffix
+    from keycycle.key_rotation.rotation_manager import RotatingKeyManager
+    from keycycle.legacy_multi_provider_wrapper import MultiProviderWrapper
 except ImportError:
     # Fallback for different path structures or if run directly
-    from keycycle.keycycle.config.dataclasses import RateLimits, KeyLimitOverride
-    from keycycle.keycycle.legacy_multi_provider_wrapper import MultiProviderWrapper
-    from keycycle.keycycle.key_rotation.rotation_manager import RotatingKeyManager
+    from keycycle.keycycle.config.dataclasses import RateLimits
     from keycycle.keycycle.config.enums import RateLimitStrategy
-    from keycycle.keycycle.core.utils import get_key_suffix
+    from keycycle.keycycle.key_rotation.rotation_manager import RotatingKeyManager
+    from keycycle.keycycle.legacy_multi_provider_wrapper import MultiProviderWrapper
 
 
 class TestKeyLimitNormalization(unittest.TestCase):
@@ -111,14 +109,8 @@ class TestKeyLimitNormalization(unittest.TestCase):
         wrapper = MultiProviderWrapper.__new__(MultiProviderWrapper)
         wrapper.logger = MagicMock()
 
-        self.assertEqual(
-            wrapper._normalize_key_limits_internal(self.api_keys, None),
-            {}
-        )
-        self.assertEqual(
-            wrapper._normalize_key_limits_internal(self.api_keys, {}),
-            {}
-        )
+        self.assertEqual(wrapper._normalize_key_limits_internal(self.api_keys, None), {})
+        self.assertEqual(wrapper._normalize_key_limits_internal(self.api_keys, {}), {})
 
 
 class TestResolveLimits(unittest.TestCase):
@@ -232,7 +224,7 @@ class TestRotatingKeyManagerWithLimitResolver(unittest.TestCase):
         )
 
         default_limits = RateLimits(5, 300, 20)
-        key = manager.get_key("test-model", default_limits, estimated_tokens=100)
+        manager.get_key("test-model", default_limits, estimated_tokens=100)
 
         # Should have called the resolver
         self.assertTrue(len(resolver_calls) > 0)
@@ -259,6 +251,7 @@ class TestRotatingKeyManagerWithLimitResolver(unittest.TestCase):
 
     def test_per_key_limits_affect_key_selection(self):
         """Test that per-key limits actually affect which key is selected."""
+
         def mock_resolver(model_id, key_suffix):
             if key_suffix == "AAAAAAAA":
                 # First key has exhausted limits (0 rpm)
@@ -286,8 +279,8 @@ class TestRotatingKeyManagerWithLimitResolver(unittest.TestCase):
 class TestFromEnvWithTiers(unittest.TestCase):
     """Test from_env factory method with tier configuration."""
 
-    @patch.object(MultiProviderWrapper, 'load_api_keys')
-    @patch.object(MultiProviderWrapper, '__init__', return_value=None)
+    @patch.object(MultiProviderWrapper, "load_api_keys")
+    @patch.object(MultiProviderWrapper, "__init__", return_value=None)
     def test_tier_config_converts_to_key_limits(self, mock_init, mock_load_keys):
         """Test that key_tiers and tier_limits are converted to key_limits."""
         mock_load_keys.return_value = ["key1", "key2", "key3"]
@@ -302,7 +295,7 @@ class TestFromEnvWithTiers(unittest.TestCase):
             tier_limits={
                 "free": free_limits,
                 "pro": pro_limits,
-            }
+            },
         )
 
         # Check that __init__ was called with converted key_limits
@@ -314,8 +307,8 @@ class TestFromEnvWithTiers(unittest.TestCase):
         self.assertEqual(key_limits[1], pro_limits)
         self.assertEqual(key_limits[2], free_limits)
 
-    @patch.object(MultiProviderWrapper, 'load_api_keys')
-    @patch.object(MultiProviderWrapper, '__init__', return_value=None)
+    @patch.object(MultiProviderWrapper, "load_api_keys")
+    @patch.object(MultiProviderWrapper, "__init__", return_value=None)
     def test_key_limits_and_tiers_combined(self, mock_init, mock_load_keys):
         """Test that explicit key_limits are merged with tier config."""
         mock_load_keys.return_value = ["key1", "key2"]
@@ -328,7 +321,7 @@ class TestFromEnvWithTiers(unittest.TestCase):
             default_model_id="gemini-2.5-flash",
             key_limits={0: explicit_limits},  # Explicit override for key 0
             key_tiers={1: "pro"},
-            tier_limits={"pro": tier_limits_obj}
+            tier_limits={"pro": tier_limits_obj},
         )
 
         call_kwargs = mock_init.call_args[1]
@@ -340,5 +333,5 @@ class TestFromEnvWithTiers(unittest.TestCase):
         self.assertEqual(key_limits[1], tier_limits_obj)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

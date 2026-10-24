@@ -1,37 +1,41 @@
-import time
 import asyncio
 import atexit
-import threading
-from threading import Lock, Event
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import threading
+import time
+from threading import Event, Lock
+from typing import Callable, Optional, Union
 
-from ..config.dataclasses import (
-    RateLimits, UsageSnapshot,
-    GlobalStats, KeySummary,
-    KeyDetailedStats, ModelAggregatedStats,
-    KeyUsage
-)
-from ..config.enums import RateLimitStrategy
-from ..config.log_config import default_logger
 from ..config.constants import (
     CLEANUP_INTERVAL_SECONDS,
-    HISTORY_LOOKBACK_SECONDS,
     DEFAULT_COOLDOWN_SECONDS,
+    HISTORY_LOOKBACK_SECONDS,
     KEY_WAIT_MAX_SECONDS,
     KEY_WAIT_POLL_SECONDS,
 )
-from ..core.utils import get_key_suffix, KeyEntry, normalize_key_entries
+from ..config.dataclasses import (
+    GlobalStats,
+    KeyDetailedStats,
+    KeySummary,
+    KeyUsage,
+    ModelAggregatedStats,
+    RateLimits,
+    UsageSnapshot,
+)
+from ..config.enums import RateLimitStrategy
+from ..config.log_config import default_logger
 from ..core.exceptions import ConfigurationError
-from ..usage.usage_logger import AsyncUsageLogger
+from ..core.utils import KeyEntry, get_key_suffix, normalize_key_entries
 from ..usage.db_logic import UsageDatabase
+from ..usage.usage_logger import AsyncUsageLogger
+
 
 class RotatingKeyManager:
     """Manages API key rotation with rate limiting"""
 
     def __init__(
         self,
-        api_keys: List[KeyEntry],
+        api_keys: list[KeyEntry],
         provider_name: str,
         strategy: RateLimitStrategy,
         db: Optional[UsageDatabase] = None,
@@ -74,7 +78,7 @@ class RotatingKeyManager:
         atexit.register(self.stop)
 
         self.logger.info("Initialized %d keys for provider %s.", len(self.keys), provider_name)
-    
+
     def force_rotate_index(self) -> None:
         """
         Force the internal pointer to increment.
@@ -97,13 +101,12 @@ class RotatingKeyManager:
         count = 0
         for row in all_history:
             suffix, model_id, ts, tokens = row
-            
+
             if suffix in key_map:
                 key_map[suffix].record_usage(model_id, tokens=tokens, timestamp=ts)
                 count += 1
-        self.logger.info("Hydrated %d records for %s.", 
-                    count, self.provider_name)
-    
+        self.logger.info("Hydrated %d records for %s.", count, self.provider_name)
+
     def _cleanup_loop(self) -> None:
         """Periodically clean deques to prevent memory bloat."""
         while not self._stop_event.is_set():
@@ -135,7 +138,9 @@ class RotatingKeyManager:
         if self._thread.is_alive():
             self._thread.join(timeout=10)
 
-    def get_key(self, model_id: str, default_limits: RateLimits, estimated_tokens: int = 1000) -> Optional[KeyUsage]:
+    def get_key(
+        self, model_id: str, default_limits: RateLimits, estimated_tokens: int = 1000
+    ) -> Optional[KeyUsage]:
         """
         Get an available API key that can handle the request.
 
@@ -167,7 +172,7 @@ class RotatingKeyManager:
                     self.current_index = idx
                     return key
             return None
-    
+
     def all_keys_dead(self) -> bool:
         """True when every key has been marked dead (401/402/403) - nothing to wait for."""
         return bool(self.keys) and all(k.dead for k in self.keys)
@@ -175,7 +180,9 @@ class RotatingKeyManager:
     def unavailable_message(self, model_id: str) -> str:
         dead = sum(1 for k in self.keys if k.dead)
         if self.all_keys_dead():
-            return f"No usable keys for {model_id}: all {len(self.keys)} keys are dead (401/402/403)"
+            return (
+                f"No usable keys for {model_id}: all {len(self.keys)} keys are dead (401/402/403)"
+            )
         return (
             f"No available keys for {model_id}: {dead}/{len(self.keys)} dead, the rest stayed "
             f"rate-limited or cooling down for {self.max_key_wait_seconds:.0f}s"
@@ -226,7 +233,9 @@ class RotatingKeyManager:
                 return None
             await asyncio.sleep(poll_seconds)
 
-    def get_specific_key(self, identifier: Union[int, str], model_id: str, estimated_tokens: int = 1000) -> Optional[KeyUsage]:
+    def get_specific_key(
+        self, identifier: Union[int, str], model_id: str, estimated_tokens: int = 1000
+    ) -> Optional[KeyUsage]:
         """
         Get a specific key by index or identifier.
         Note: This does NOT check rate limits implicitly to allow 'hard' retrieval,
@@ -276,7 +285,7 @@ class RotatingKeyManager:
 
     # --- STATS HELPERS ---
 
-    def _find_key(self, identifier: Union[int, str]) -> Tuple[Optional[KeyUsage], int]:
+    def _find_key(self, identifier: Union[int, str]) -> tuple[Optional[KeyUsage], int]:
         """Locate key by index (int) or suffix/full-key (str)."""
         if isinstance(identifier, int):
             if 0 <= identifier < len(self.keys):
@@ -325,13 +334,16 @@ class RotatingKeyManager:
                     contributing_keys.append(KeySummary(index=i, suffix=suffix, snapshot=snap))
         return ModelAggregatedStats(model_id=model_id, total=total, keys=contributing_keys)
 
-    def get_granular_stats(self, identifier: Union[int, str], model_id: str) -> Optional[KeySummary]:
+    def get_granular_stats(
+        self, identifier: Union[int, str], model_id: str
+    ) -> Optional[KeySummary]:
         """Specific Key + Specific Model."""
         with self.lock:
             key, idx = self._find_key(identifier)
             if not key:
                 return None
             suffix = get_key_suffix(key.api_key)
-            snap = key.buckets[model_id].get_snapshot() if model_id in key.buckets else UsageSnapshot()
+            snap = (
+                key.buckets[model_id].get_snapshot() if model_id in key.buckets else UsageSnapshot()
+            )
             return KeySummary(index=idx, suffix=suffix, snapshot=snap)
- 

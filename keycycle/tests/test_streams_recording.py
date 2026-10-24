@@ -2,14 +2,18 @@
 Integration tests for streaming usage recording.
 Tests that both sync and async streams properly record request and token usage.
 """
+
 import asyncio
-import pytest
 from pathlib import Path
+
+import pytest
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 ENV_PATH = PROJECT_ROOT / "local.env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
+
+# ruff: noqa: E402  (the providers read their keys as they import: the env loads first)
 
 from keycycle import MultiProviderWrapper
 
@@ -22,9 +26,7 @@ class TestStreamsRecording:
         """Create Cerebras wrapper."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='cerebras',
-                default_model_id='gpt-oss-120b',
-                env_file=str(ENV_PATH)
+                provider="cerebras", default_model_id="gpt-oss-120b", env_file=str(ENV_PATH)
             )
             yield wrapper
             wrapper.manager.stop()
@@ -36,9 +38,9 @@ class TestStreamsRecording:
         """Create Groq wrapper."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='groq',
-                default_model_id='meta-llama/llama-4-maverick-17b-128e-instruct',
-                env_file=str(ENV_PATH)
+                provider="groq",
+                default_model_id="meta-llama/llama-4-maverick-17b-128e-instruct",
+                env_file=str(ENV_PATH),
             )
             yield wrapper
             wrapper.manager.stop()
@@ -50,9 +52,9 @@ class TestStreamsRecording:
         """Create OpenRouter wrapper."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='openrouter',
-                default_model_id='xiaomi/mimo-v2-flash:free',
-                env_file=str(ENV_PATH)
+                provider="openrouter",
+                default_model_id="xiaomi/mimo-v2-flash:free",
+                env_file=str(ENV_PATH),
             )
             yield wrapper
             wrapper.manager.stop()
@@ -71,7 +73,7 @@ class TestStreamsRecording:
             messages=[{"role": "user", "content": "Write a one word poem."}],
             max_tokens=10,
             stream=True,
-            stream_options={"include_usage": True}
+            stream_options={"include_usage": True},
         )
         sync_content = ""
         for chunk in stream:
@@ -85,7 +87,7 @@ class TestStreamsRecording:
         stream = await aclient.chat.completions.create(
             messages=[{"role": "user", "content": "Write another one word poem."}],
             max_tokens=10,
-            stream=True
+            stream=True,
         )
         async_content = ""
         async for chunk in stream:
@@ -105,7 +107,9 @@ class TestStreamsRecording:
         token_diff = final_tokens - initial_tokens
 
         # We made 2 requests
-        assert req_diff >= 2, f"{provider_name}: Expected at least 2 requests recorded, got {req_diff}"
+        assert req_diff >= 2, (
+            f"{provider_name}: Expected at least 2 requests recorded, got {req_diff}"
+        )
 
         return req_diff, token_diff
 
@@ -142,7 +146,7 @@ class TestStreamsRecording:
             messages=[{"role": "user", "content": "Say hello."}],
             max_tokens=10,
             stream=True,
-            stream_options={"include_usage": True}
+            stream_options={"include_usage": True},
         )
 
         chunks = list(stream)
@@ -154,9 +158,7 @@ class TestStreamsRecording:
         aclient = cerebras_wrapper.get_async_openai_client()
 
         stream = await aclient.chat.completions.create(
-            messages=[{"role": "user", "content": "Say hello."}],
-            max_tokens=10,
-            stream=True
+            messages=[{"role": "user", "content": "Say hello."}], max_tokens=10, stream=True
         )
 
         chunks = []

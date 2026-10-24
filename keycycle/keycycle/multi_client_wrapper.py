@@ -7,30 +7,29 @@ This module provides the primary interface for keycycle, supporting:
 - Environment-based configuration with indexed params
 """
 
-import os
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, TypeVar, Union
 
-from dotenv import load_dotenv
-
-from .key_rotation.rotation_manager import RotatingKeyManager
-from .config.dataclasses import RateLimits, KeyLimitOverride
+from .adapters.generic_adapter import (
+    AsyncGenericRotatingClient,
+    SyncGenericRotatingClient,
+    create_rotating_client,
+)
+from .config.dataclasses import KeyLimitOverride, RateLimits
 from .config.enums import RateLimitStrategy
 from .config.models import MODEL_LIMITS, PROVIDER_STRATEGIES
+from .core.exceptions import ConfigurationError
 from .core.utils import (
     KeyEntry,
-    get_key_suffix,
+)
+from .core.utils import (
     load_api_keys as _load_api_keys,
+)
+from .core.utils import (
     normalize_key_limits as _normalize_key_limits,
 )
-from .core.exceptions import ConfigurationError
+from .key_rotation.rotation_manager import RotatingKeyManager
 from .usage.db_logic import UsageDatabase
-from .adapters.generic_adapter import (
-    create_rotating_client,
-    SyncGenericRotatingClient,
-    AsyncGenericRotatingClient,
-)
 
 T = TypeVar("T")
 
@@ -38,9 +37,10 @@ T = TypeVar("T")
 @dataclass
 class ProviderConfig:
     """Internal config for a registered provider."""
+
     default_model: Optional[str] = None
-    limits: Optional[Dict[str, RateLimits]] = None
-    excluded_kwargs: Optional[List[str]] = None
+    limits: Optional[dict[str, RateLimits]] = None
+    excluded_kwargs: Optional[list[str]] = None
 
 
 @dataclass
@@ -58,12 +58,13 @@ class ProviderEnvConfig:
         excluded_kwargs: List of kwarg names to exclude from client constructor.
             Useful for clients that don't accept certain params (e.g., TwelveLabs doesn't accept 'model').
     """
+
     default_model: Optional[str] = None
-    extra_params: Optional[List[str]] = None
+    extra_params: Optional[list[str]] = None
     strategy: RateLimitStrategy = RateLimitStrategy.PER_MODEL
-    limits: Optional[Dict[str, RateLimits]] = None
+    limits: Optional[dict[str, RateLimits]] = None
     api_key_param: str = "api_key"
-    excluded_kwargs: Optional[List[str]] = None
+    excluded_kwargs: Optional[list[str]] = None
 
 
 class MultiClientWrapper:
@@ -111,9 +112,9 @@ class MultiClientWrapper:
         # and no db_url / TIDB_DB_URL is required.
         self._track_usage = bool(track_usage)
         self.db = UsageDatabase(db_url, db_env_var) if self._track_usage else None
-        self._managers: Dict[str, RotatingKeyManager] = {}
-        self._configs: Dict[str, ProviderConfig] = {}
-        self._key_limits: Dict[str, Dict[str, KeyLimitOverride]] = {}
+        self._managers: dict[str, RotatingKeyManager] = {}
+        self._configs: dict[str, ProviderConfig] = {}
+        self._key_limits: dict[str, dict[str, KeyLimitOverride]] = {}
 
     @property
     def track_usage(self) -> bool:
@@ -136,13 +137,13 @@ class MultiClientWrapper:
     def register_provider(
         self,
         provider: str,
-        keys: List[KeyEntry],
+        keys: list[KeyEntry],
         strategy: Optional[RateLimitStrategy] = None,
         default_model: Optional[str] = None,
-        limits: Optional[Dict[str, RateLimits]] = None,
+        limits: Optional[dict[str, RateLimits]] = None,
         api_key_param: str = "api_key",
-        key_limits: Optional[Dict[Union[int, str], KeyLimitOverride]] = None,
-        **kwargs
+        key_limits: Optional[dict[Union[int, str], KeyLimitOverride]] = None,
+        **kwargs,
     ) -> "MultiClientWrapper":
         """
         Register a provider with its keys.
@@ -167,7 +168,9 @@ class MultiClientWrapper:
             strategy = self.PROVIDER_STRATEGIES.get(provider, RateLimitStrategy.PER_MODEL)
 
         # Normalize key_limits to suffix-based
-        normalized_key_limits = self._normalize_key_limits_from_entries(keys, key_limits, api_key_param)
+        normalized_key_limits = self._normalize_key_limits_from_entries(
+            keys, key_limits, api_key_param
+        )
         self._key_limits[provider] = normalized_key_limits
 
         # Per-provider override is allowed; otherwise inherit the wrapper's setting.
@@ -181,7 +184,7 @@ class MultiClientWrapper:
             api_key_param=api_key_param,
             limit_resolver=lambda m, k, p=provider: self._resolve_limits(p, m, k),
             track_usage=manager_track_usage,
-            **kwargs
+            **kwargs,
         )
         self._managers[provider] = manager
         self._configs[provider] = ProviderConfig(default_model, limits)
@@ -189,10 +192,10 @@ class MultiClientWrapper:
 
     def _normalize_key_limits_from_entries(
         self,
-        keys: List[KeyEntry],
-        key_limits: Optional[Dict[Union[int, str], KeyLimitOverride]],
+        keys: list[KeyEntry],
+        key_limits: Optional[dict[Union[int, str], KeyLimitOverride]],
         api_key_param: str = "api_key",
-    ) -> Dict[str, KeyLimitOverride]:
+    ) -> dict[str, KeyLimitOverride]:
         """Normalize key_limits to suffix-based lookup."""
         if not key_limits:
             return {}
@@ -208,10 +211,7 @@ class MultiClientWrapper:
         return _normalize_key_limits(primary_keys, key_limits)
 
     def _resolve_limits(
-        self,
-        provider: str,
-        model_id: str,
-        key_suffix: Optional[str] = None
+        self, provider: str, model_id: str, key_suffix: Optional[str] = None
     ) -> RateLimits:
         """Resolve rate limits for a provider/model/key combination."""
         config = self._configs.get(provider)
@@ -226,8 +226,8 @@ class MultiClientWrapper:
                 elif isinstance(override, dict):
                     if model_id in override:
                         return override[model_id]
-                    if '__default__' in override:
-                        return override['__default__']
+                    if "__default__" in override:
+                        return override["__default__"]
 
         # Check provider-specific limits from config
         if config and config.limits and model_id in config.limits:
@@ -235,12 +235,14 @@ class MultiClientWrapper:
 
         # Fall back to global model limits
         provider_limits = self.MODEL_LIMITS.get(provider, {})
-        return provider_limits.get(model_id, provider_limits.get('default', RateLimits(10, 100, 1000)))
+        return provider_limits.get(
+            model_id, provider_limits.get("default", RateLimits(10, 100, 1000))
+        )
 
     def get_rotating_client(
         self,
         provider: str,
-        client_class: Type[T],
+        client_class: type[T],
         model: Optional[str] = None,
         api_key_param: Optional[str] = None,
         is_async: Optional[bool] = None,
@@ -248,8 +250,8 @@ class MultiClientWrapper:
         estimated_tokens: int = 1000,
         max_retries: int = 5,
         model_param: str = "model",
-        excluded_kwargs: Optional[List[str]] = None,
-        **client_kwargs
+        excluded_kwargs: Optional[list[str]] = None,
+        **client_kwargs,
     ) -> Union[SyncGenericRotatingClient[T], AsyncGenericRotatingClient[T]]:
         """
         Get a rotating client for a registered provider.
@@ -277,7 +279,9 @@ class MultiClientWrapper:
         provider = provider.lower()
         manager = self._managers.get(provider)
         if not manager:
-            raise ValueError(f"Provider '{provider}' not registered. Call register_provider() first.")
+            raise ValueError(
+                f"Provider '{provider}' not registered. Call register_provider() first."
+            )
 
         config = self._configs[provider]
         default_model = model or config.default_model or "default"
@@ -316,7 +320,7 @@ class MultiClientWrapper:
     @classmethod
     def from_env(
         cls,
-        providers: Dict[str, ProviderEnvConfig],
+        providers: dict[str, ProviderEnvConfig],
         env_file: Optional[str] = None,
         db_url: Optional[str] = None,
         db_env_var: str = "TIDB_DB_URL",
@@ -380,9 +384,9 @@ class MultiClientWrapper:
     def load_api_keys(
         provider: str,
         env_file: Optional[str] = None,
-        extra_params: Optional[List[str]] = None,
+        extra_params: Optional[list[str]] = None,
         api_key_param: str = "api_key",
-    ) -> List[KeyEntry]:
+    ) -> list[KeyEntry]:
         """
         Load keys from environment variables with indexed pattern.
 

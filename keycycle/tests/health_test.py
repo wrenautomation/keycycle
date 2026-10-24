@@ -2,19 +2,23 @@
 Integration tests for provider API key health checking.
 Validates that configured API keys can make successful requests.
 """
+
 import os
-import pytest
 from pathlib import Path
+
+import pytest
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 ENV_PATH = PROJECT_ROOT / "local.env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
 
+# ruff: noqa: E402  (the providers read their keys as they import: the env loads first)
+
 from agno.agent import Agent
-from agno.models.groq import Groq
 from agno.models.cerebras import Cerebras
 from agno.models.google.gemini import Gemini
+from agno.models.groq import Groq
 from agno.models.openrouter import OpenRouter
 
 

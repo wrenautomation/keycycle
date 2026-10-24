@@ -14,6 +14,7 @@ These tests cover the three levels the switch lives at:
 
 Everything here runs offline against a sqlite file - no network, no real keys.
 """
+
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -37,6 +38,7 @@ LIMITS = RateLimits(100, 6000, 10000, 1000000)
 
 # --- Fixtures / helpers ---------------------------------------------------
 
+
 @pytest.fixture
 def db_url(tmp_path):
     """A throwaway sqlite file (a shared in-memory DB is per-connection)."""
@@ -53,7 +55,7 @@ def make_manager():
             api_keys=list(KEYS),
             provider_name=PROVIDER,
             strategy=RateLimitStrategy.PER_MODEL,
-            **kwargs
+            **kwargs,
         )
         created.append(manager)
         return manager
@@ -88,13 +90,15 @@ def insert_history_row(db: UsageDatabase, api_key: str, tokens: int = 123) -> No
     with db.engine.connect() as conn:
         conn.execute(
             db.usage_logs.insert(),
-            [{
-                "provider": PROVIDER,
-                "model": MODEL,
-                "api_key_suffix": get_key_suffix(api_key),
-                "timestamp": time.time(),
-                "tokens": tokens,
-            }],
+            [
+                {
+                    "provider": PROVIDER,
+                    "model": MODEL,
+                    "api_key_suffix": get_key_suffix(api_key),
+                    "timestamp": time.time(),
+                    "tokens": tokens,
+                }
+            ],
         )
         conn.commit()
 
@@ -104,9 +108,7 @@ class RecordingOpenAIClient:
 
     def __init__(self, total_tokens: int = 11):
         self.calls = []
-        self.chat = SimpleNamespace(
-            completions=SimpleNamespace(create=self._create)
-        )
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
         self._total_tokens = total_tokens
 
     def _create(self, **kwargs):
@@ -115,6 +117,7 @@ class RecordingOpenAIClient:
 
 
 # --- Manager: no database at all ------------------------------------------
+
 
 class TestManagerWithoutDatabase:
     """db=None means the manager is purely in-memory: no logger, no writes."""
@@ -178,8 +181,8 @@ class TestManagerWithoutDatabase:
 
 # --- Manager: database present, switch flipped ----------------------------
 
-class TestManagerWithDatabase:
 
+class TestManagerWithDatabase:
     def test_tracking_on_writes_a_row(self, db_url, make_manager):
         manager = make_manager(db=UsageDatabase(db_url=db_url), track_usage=True)
 
@@ -266,8 +269,8 @@ class TestManagerWithDatabase:
 
 # --- MultiProviderWrapper --------------------------------------------------
 
-class TestMultiProviderWrapperToggle:
 
+class TestMultiProviderWrapperToggle:
     def test_constructor_needs_no_database(self, monkeypatch, stop_wrappers):
         monkeypatch.delenv("TIDB_DB_URL", raising=False)
 
@@ -362,8 +365,8 @@ class TestMultiProviderWrapperToggle:
 
 # --- MultiClientWrapper ----------------------------------------------------
 
-class TestMultiClientWrapperToggle:
 
+class TestMultiClientWrapperToggle:
     def test_constructor_needs_no_database(self, monkeypatch, stop_wrappers):
         monkeypatch.delenv("TIDB_DB_URL", raising=False)
 
@@ -401,6 +404,7 @@ class TestMultiClientWrapperToggle:
 
 # --- OpenAI adapter: per-call override ------------------------------------
 
+
 class TestOpenAIAdapterPerCallOverride:
     """`track_usage` must never reach the OpenAI SDK, which rejects unknown kwargs."""
 
@@ -436,8 +440,10 @@ class TestOpenAIAdapterPerCallOverride:
         client = self._client(manager)
         fake = RecordingOpenAIClient()
 
-        with patch.object(client, "_get_fresh_client", return_value=fake), \
-             patch.object(manager, "record_usage", wraps=manager.record_usage) as spy:
+        with (
+            patch.object(client, "_get_fresh_client", return_value=fake),
+            patch.object(manager, "record_usage", wraps=manager.record_usage) as spy,
+        ):
             client.chat.completions.create(
                 model=MODEL,
                 messages=[{"role": "user", "content": "hi"}],
@@ -452,8 +458,10 @@ class TestOpenAIAdapterPerCallOverride:
         client = self._client(manager)
         fake = RecordingOpenAIClient()
 
-        with patch.object(client, "_get_fresh_client", return_value=fake), \
-             patch.object(manager, "record_usage", wraps=manager.record_usage) as spy:
+        with (
+            patch.object(client, "_get_fresh_client", return_value=fake),
+            patch.object(manager, "record_usage", wraps=manager.record_usage) as spy,
+        ):
             client.chat.completions.create(
                 model=MODEL,
                 messages=[{"role": "user", "content": "hi"}],

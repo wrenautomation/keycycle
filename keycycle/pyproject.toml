@@ -121,3 +121,10 @@ module = [
     "moonshot.*",
 ]
 ignore_missing_imports = true  
+[tool.ruff]
+# The gate: `ruff check` and `ruff format --check` (see .github/workflows/ci.yml). Target follows requires-python.
+line-length = 100
+
+[tool.ruff.lint]
+# Ruff's defaults (pyflakes, the pycodestyle errors), import order, and pyupgrade for the supported Pythons.
+select = ["E4", "E7", "E9", "F", "I", "UP"]

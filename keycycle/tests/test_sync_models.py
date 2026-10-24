@@ -1,7 +1,9 @@
 import importlib.util
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("sync_models", Path(__file__).parents[2] / "scripts" / "sync_models.py")
+spec = importlib.util.spec_from_file_location(
+    "sync_models", Path(__file__).parents[2] / "scripts" / "sync_models.py"
+)
 sm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sm)
 
@@ -20,6 +22,11 @@ def test_norm_maps_ai_studio_names_to_ids():
 
 def test_limits_derives_hour_and_day():
     assert sm.limits(30, 1000, 8000, tpd=200000) == {
-        "requests_per_minute": 30, "requests_per_hour": 1000, "requests_per_day": 1000,
-        "tokens_per_minute": 8000, "tokens_per_hour": 200000, "tokens_per_day": 200000}
+        "requests_per_minute": 30,
+        "requests_per_hour": 1000,
+        "requests_per_day": 1000,
+        "tokens_per_minute": 8000,
+        "tokens_per_hour": 200000,
+        "tokens_per_day": 200000,
+    }
     assert sm.limits(5)["requests_per_day"] == 7200

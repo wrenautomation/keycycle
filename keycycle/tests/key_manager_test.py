@@ -2,11 +2,13 @@
 Integration tests for KeyManager functionality.
 Tests key rotation, capacity checking, and statistics collection.
 """
-import pytest
+
 from pathlib import Path
 
-from keycycle import MultiProviderWrapper
+import pytest
 from agno.agent import Agent
+
+from keycycle import MultiProviderWrapper
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 ENV_FILE = str(PROJECT_ROOT / "local.env")
@@ -19,7 +21,7 @@ class TestKeyManagerIntegration:
     def cerebras_wrapper(self, load_env):
         """Create Cerebras wrapper."""
         try:
-            wrapper = MultiProviderWrapper.from_env("cerebras", 'gpt-oss-120b', env_file=ENV_FILE)
+            wrapper = MultiProviderWrapper.from_env("cerebras", "gpt-oss-120b", env_file=ENV_FILE)
             yield wrapper
             wrapper.manager.stop()
         except Exception as e:
@@ -29,7 +31,9 @@ class TestKeyManagerIntegration:
     def groq_wrapper(self, load_env):
         """Create Groq wrapper."""
         try:
-            wrapper = MultiProviderWrapper.from_env("groq", 'llama-3.3-70b-versatile', env_file=ENV_FILE)
+            wrapper = MultiProviderWrapper.from_env(
+                "groq", "llama-3.3-70b-versatile", env_file=ENV_FILE
+            )
             yield wrapper
             wrapper.manager.stop()
         except Exception as e:
@@ -39,7 +43,7 @@ class TestKeyManagerIntegration:
     def gemini_wrapper(self, load_env):
         """Create Gemini wrapper."""
         try:
-            wrapper = MultiProviderWrapper.from_env("gemini", 'gemini-2.5-flash', env_file=ENV_FILE)
+            wrapper = MultiProviderWrapper.from_env("gemini", "gemini-2.5-flash", env_file=ENV_FILE)
             yield wrapper
             wrapper.manager.stop()
         except Exception as e:
@@ -49,7 +53,9 @@ class TestKeyManagerIntegration:
     def openrouter_wrapper(self, load_env):
         """Create OpenRouter wrapper."""
         try:
-            wrapper = MultiProviderWrapper.from_env("openrouter", 'qwen/qwen3-coder:free', env_file=ENV_FILE)
+            wrapper = MultiProviderWrapper.from_env(
+                "openrouter", "qwen/qwen3-coder:free", env_file=ENV_FILE
+            )
             yield wrapper
             wrapper.manager.stop()
         except Exception as e:
@@ -63,7 +69,7 @@ class TestKeyManagerIntegration:
         for i in range(3):
             model = cerebras_wrapper.get_model()
             assert model is not None
-            assert hasattr(model, 'api_key')
+            assert hasattr(model, "api_key")
             keys_used.add(model.api_key)
 
             agent = Agent(model=model)
@@ -79,7 +85,7 @@ class TestKeyManagerIntegration:
         try:
             model = groq_wrapper.get_model(estimated_tokens=2000)
             assert model is not None
-            assert hasattr(model, 'api_key')
+            assert hasattr(model, "api_key")
 
             agent = Agent(model=model)
             response = agent.run("Explain quantum entanglement in one sentence.")
@@ -103,7 +109,7 @@ class TestKeyManagerIntegration:
         """Test OpenRouter key rotation with free model."""
         model = openrouter_wrapper.get_model()
         assert model is not None
-        assert hasattr(model, 'api_key')
+        assert hasattr(model, "api_key")
 
         agent = Agent(model=model)
         response = agent.run("Write a Python function to add two numbers.")
@@ -114,7 +120,7 @@ class TestKeyManagerIntegration:
         """Test global stats retrieval for Cerebras."""
         stats = cerebras_wrapper.manager.get_global_stats()
         assert stats is not None
-        assert hasattr(stats, 'total')
+        assert hasattr(stats, "total")
 
     @pytest.mark.integration
     def test_groq_model_stats(self, groq_wrapper: MultiProviderWrapper):
@@ -125,7 +131,7 @@ class TestKeyManagerIntegration:
         agent.run("Hello")
 
         # Now check stats - the print methods should work without error
-        groq_wrapper.print_model_stats('llama-3.3-70b-versatile')
+        groq_wrapper.print_model_stats("llama-3.3-70b-versatile")
 
     @pytest.mark.integration
     def test_gemini_key_stats(self, gemini_wrapper: MultiProviderWrapper):
@@ -151,7 +157,7 @@ class TestKeyManagerIntegration:
         agent.run("Hello")
 
         # Granular stats should work
-        gemini_wrapper.print_granular_stats(api_key, 'gemini-2.5-flash')
+        gemini_wrapper.print_granular_stats(api_key, "gemini-2.5-flash")
 
     @pytest.mark.integration
     def test_openrouter_key_and_granular_stats(self, openrouter_wrapper: MultiProviderWrapper):
@@ -165,4 +171,4 @@ class TestKeyManagerIntegration:
 
         # Stats should work without error
         openrouter_wrapper.print_key_stats(api_key)
-        openrouter_wrapper.print_granular_stats(api_key, 'qwen/qwen3-coder:free')
+        openrouter_wrapper.print_granular_stats(api_key, "qwen/qwen3-coder:free")

@@ -1,19 +1,17 @@
 """
 Tests for the new MultiClientWrapper class.
 """
+
 import os
 import unittest
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any
 
 from keycycle import (
     MultiClientWrapper,
     ProviderEnvConfig,
-    RateLimits,
-    KeyEntry,
 )
 from keycycle.config.enums import RateLimitStrategy
-from keycycle.core.utils import normalize_key_entry, normalize_key_entries
+from keycycle.core.utils import normalize_key_entries, normalize_key_entry
 
 
 class TestKeyEntryNormalization(unittest.TestCase):
@@ -84,11 +82,7 @@ class TestKeyUsageParams(unittest.TestCase):
         from keycycle.config.dataclasses import KeyUsage
 
         params = {"api_key": "sk-test", "index_id": "idx_abc"}
-        key_usage = KeyUsage(
-            api_key="sk-test",
-            strategy=RateLimitStrategy.PER_MODEL,
-            params=params
-        )
+        key_usage = KeyUsage(api_key="sk-test", strategy=RateLimitStrategy.PER_MODEL, params=params)
 
         client_params = key_usage.get_client_params()
 
@@ -116,7 +110,7 @@ class TestMultiClientWrapperRegister(unittest.TestCase):
         self.mock_db = MagicMock()
         self.mock_db.load_provider_history.return_value = []
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_register_single_provider(self, mock_db_class):
         """Test registering a single provider."""
         mock_db_class.return_value = self.mock_db
@@ -131,7 +125,7 @@ class TestMultiClientWrapperRegister(unittest.TestCase):
         self.assertIn("anthropic", wrapper._managers)
         self.assertEqual(wrapper._configs["anthropic"].default_model, "claude-3-sonnet")
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_register_provider_with_extra_params(self, mock_db_class):
         """Test registering a provider with extra params (dict keys)."""
         mock_db_class.return_value = self.mock_db
@@ -153,7 +147,7 @@ class TestMultiClientWrapperRegister(unittest.TestCase):
         self.assertEqual(manager.keys[0].params["index_id"], "idx_abc")
         self.assertEqual(manager.keys[1].params["index_id"], "idx_xyz")
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_register_multiple_providers(self, mock_db_class):
         """Test registering multiple providers."""
         mock_db_class.return_value = self.mock_db
@@ -168,7 +162,7 @@ class TestMultiClientWrapperRegister(unittest.TestCase):
         self.assertIn("openai", wrapper._managers)
         self.assertIn("gemini", wrapper._managers)
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_register_provider_chaining(self, mock_db_class):
         """Test that register_provider returns self for chaining."""
         mock_db_class.return_value = self.mock_db
@@ -183,30 +177,35 @@ class TestMultiClientWrapperRegister(unittest.TestCase):
 class TestMultiClientWrapperFromEnv(unittest.TestCase):
     """Test MultiClientWrapper.from_env factory method."""
 
-    @patch.dict(os.environ, {
-        "NUM_ANTHROPIC": "2",
-        "ANTHROPIC_API_KEY_1": "sk-ant-1",
-        "ANTHROPIC_API_KEY_2": "sk-ant-2",
-        "NUM_TWELVELABS": "2",
-        "TWELVELABS_API_KEY_1": "tl-key-1",
-        "TWELVELABS_INDEX_ID_1": "idx_abc",
-        "TWELVELABS_API_KEY_2": "tl-key-2",
-        "TWELVELABS_INDEX_ID_2": "idx_xyz",
-    })
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            "NUM_ANTHROPIC": "2",
+            "ANTHROPIC_API_KEY_1": "sk-ant-1",
+            "ANTHROPIC_API_KEY_2": "sk-ant-2",
+            "NUM_TWELVELABS": "2",
+            "TWELVELABS_API_KEY_1": "tl-key-1",
+            "TWELVELABS_INDEX_ID_1": "idx_abc",
+            "TWELVELABS_API_KEY_2": "tl-key-2",
+            "TWELVELABS_INDEX_ID_2": "idx_xyz",
+        },
+    )
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
+    @patch("keycycle.core.utils.load_dotenv")
     def test_from_env_multiple_providers(self, mock_dotenv, mock_db_class):
         """Test creating wrapper from environment for multiple providers."""
         mock_db_class.return_value = MagicMock()
         mock_db_class.return_value.load_provider_history.return_value = []
 
-        wrapper = MultiClientWrapper.from_env({
-            "anthropic": ProviderEnvConfig(default_model="claude-3-sonnet"),
-            "twelvelabs": ProviderEnvConfig(
-                default_model="pegasus-1",
-                extra_params=["index_id"],
-            ),
-        })
+        wrapper = MultiClientWrapper.from_env(
+            {
+                "anthropic": ProviderEnvConfig(default_model="claude-3-sonnet"),
+                "twelvelabs": ProviderEnvConfig(
+                    default_model="pegasus-1",
+                    extra_params=["index_id"],
+                ),
+            }
+        )
 
         self.assertIn("anthropic", wrapper._managers)
         self.assertIn("twelvelabs", wrapper._managers)
@@ -220,25 +219,30 @@ class TestMultiClientWrapperFromEnv(unittest.TestCase):
         self.assertEqual(tl_manager.keys[0].params["api_key"], "tl-key-1")
         self.assertEqual(tl_manager.keys[0].params["index_id"], "idx_abc")
 
-    @patch.dict(os.environ, {
-        "NUM_CUSTOM": "1",
-        "CUSTOM_API_KEY_1": "custom-key-1",
-        "CUSTOM_ORG_ID_1": "org_abc",
-        "CUSTOM_PROJECT_ID_1": "proj_xyz",
-    })
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            "NUM_CUSTOM": "1",
+            "CUSTOM_API_KEY_1": "custom-key-1",
+            "CUSTOM_ORG_ID_1": "org_abc",
+            "CUSTOM_PROJECT_ID_1": "proj_xyz",
+        },
+    )
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
+    @patch("keycycle.core.utils.load_dotenv")
     def test_from_env_with_multiple_extra_params(self, mock_dotenv, mock_db_class):
         """Test loading multiple extra params from environment."""
         mock_db_class.return_value = MagicMock()
         mock_db_class.return_value.load_provider_history.return_value = []
 
-        wrapper = MultiClientWrapper.from_env({
-            "custom": ProviderEnvConfig(
-                default_model="custom-model",
-                extra_params=["org_id", "project_id"],
-            ),
-        })
+        wrapper = MultiClientWrapper.from_env(
+            {
+                "custom": ProviderEnvConfig(
+                    default_model="custom-model",
+                    extra_params=["org_id", "project_id"],
+                ),
+            }
+        )
 
         manager = wrapper._managers["custom"]
         params = manager.keys[0].params
@@ -251,7 +255,7 @@ class TestMultiClientWrapperFromEnv(unittest.TestCase):
 class TestMultiClientWrapperGetClient(unittest.TestCase):
     """Test MultiClientWrapper.get_rotating_client method."""
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_get_client_unregistered_provider_raises(self, mock_db_class):
         """Test that getting client for unregistered provider raises ValueError."""
         mock_db_class.return_value = MagicMock()
@@ -263,8 +267,8 @@ class TestMultiClientWrapperGetClient(unittest.TestCase):
 
         self.assertIn("not registered", str(ctx.exception))
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
-    @patch('keycycle.multi_client_wrapper.create_rotating_client')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
+    @patch("keycycle.multi_client_wrapper.create_rotating_client")
     def test_get_client_uses_default_model(self, mock_create, mock_db_class):
         """Test that get_rotating_client uses provider's default model."""
         mock_db_class.return_value = MagicMock()
@@ -285,13 +289,16 @@ class TestMultiClientWrapperGetClient(unittest.TestCase):
 class TestLoadApiKeysStatic(unittest.TestCase):
     """Test the static load_api_keys method."""
 
-    @patch.dict(os.environ, {
-        "NUM_TEST": "3",
-        "TEST_API_KEY_1": "key-1",
-        "TEST_API_KEY_2": "key-2",
-        "TEST_API_KEY_3": "key-3",
-    })
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            "NUM_TEST": "3",
+            "TEST_API_KEY_1": "key-1",
+            "TEST_API_KEY_2": "key-2",
+            "TEST_API_KEY_3": "key-3",
+        },
+    )
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_simple_keys(self, mock_dotenv):
         """Test loading simple string keys."""
         keys = MultiClientWrapper.load_api_keys("test")
@@ -301,14 +308,17 @@ class TestLoadApiKeysStatic(unittest.TestCase):
         self.assertEqual(keys[1], "key-2")
         self.assertEqual(keys[2], "key-3")
 
-    @patch.dict(os.environ, {
-        "NUM_PROVIDER": "2",
-        "PROVIDER_API_KEY_1": "key-a",
-        "PROVIDER_INDEX_ID_1": "idx-a",
-        "PROVIDER_API_KEY_2": "key-b",
-        "PROVIDER_INDEX_ID_2": "idx-b",
-    })
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            "NUM_PROVIDER": "2",
+            "PROVIDER_API_KEY_1": "key-a",
+            "PROVIDER_INDEX_ID_1": "idx-a",
+            "PROVIDER_API_KEY_2": "key-b",
+            "PROVIDER_INDEX_ID_2": "idx-b",
+        },
+    )
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_keys_with_extra_params(self, mock_dotenv):
         """Test loading keys with extra params."""
         keys = MultiClientWrapper.load_api_keys("provider", extra_params=["index_id"])
@@ -321,7 +331,7 @@ class TestLoadApiKeysStatic(unittest.TestCase):
         self.assertEqual(keys[1]["index_id"], "idx-b")
 
     @patch.dict(os.environ, {"NUM_MISSING": "1"}, clear=False)
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_keys_missing_key_raises(self, mock_dotenv):
         """Test that missing key raises ValueError."""
         # NUM_MISSING is set but MISSING_API_KEY_1 is not
@@ -330,16 +340,19 @@ class TestLoadApiKeysStatic(unittest.TestCase):
 
         self.assertIn("Missing API key", str(ctx.exception))
 
-    @patch.dict(os.environ, {
-        # The fleet convention (0.3.2): the first NUM indices are the
-        # sanctioned live keys; keys parked at higher indices beyond a gap
-        # are dead or spare ON PURPOSE (mirrors William's GROQ fleet:
-        # 1..24 live, 37..46 parked dead). NUM is authoritative.
-        "NUM_GAPPY": "24",
-        **{f"GAPPY_API_KEY_{i}": f"key-{i}" for i in range(1, 25)},
-        **{f"GAPPY_API_KEY_{i}": f"key-{i}" for i in range(37, 47)},
-    })
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            # The fleet convention (0.3.2): the first NUM indices are the
+            # sanctioned live keys; keys parked at higher indices beyond a gap
+            # are dead or spare ON PURPOSE (mirrors William's GROQ fleet:
+            # 1..24 live, 37..46 parked dead). NUM is authoritative.
+            "NUM_GAPPY": "24",
+            **{f"GAPPY_API_KEY_{i}": f"key-{i}" for i in range(1, 25)},
+            **{f"GAPPY_API_KEY_{i}": f"key-{i}" for i in range(37, 47)},
+        },
+    )
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_keys_num_caps_out_parked_keys(self, mock_dotenv):
         """Only the first NUM sorted indices load; parked keys stay out."""
         keys = MultiClientWrapper.load_api_keys("gappy")
@@ -348,30 +361,36 @@ class TestLoadApiKeysStatic(unittest.TestCase):
         self.assertEqual(keys[0], "key-1")
         self.assertEqual(keys[-1], "key-24")
 
-    @patch.dict(os.environ, {
-        # A gap INSIDE the sanctioned range is tolerated: index 2 retired,
-        # NUM still says 3, so the loader takes the first 3 that exist
-        # (1, 3, 4) rather than crashing or stopping at the gap.
-        "NUM_HOLEY": "3",
-        "HOLEY_API_KEY_1": "key-1",
-        "HOLEY_API_KEY_3": "key-3",
-        "HOLEY_API_KEY_4": "key-4",
-        "HOLEY_API_KEY_9": "key-9",
-    })
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            # A gap INSIDE the sanctioned range is tolerated: index 2 retired,
+            # NUM still says 3, so the loader takes the first 3 that exist
+            # (1, 3, 4) rather than crashing or stopping at the gap.
+            "NUM_HOLEY": "3",
+            "HOLEY_API_KEY_1": "key-1",
+            "HOLEY_API_KEY_3": "key-3",
+            "HOLEY_API_KEY_4": "key-4",
+            "HOLEY_API_KEY_9": "key-9",
+        },
+    )
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_keys_tolerates_gap_inside_sanctioned_range(self, mock_dotenv):
         keys = MultiClientWrapper.load_api_keys("holey")
         self.assertEqual(keys, ["key-1", "key-3", "key-4"])
 
-    @patch.dict(os.environ, {
-        "NUM_SPARSE": "5",
-        "SPARSE_API_KEY_1": "key-1",
-        "SPARSE_API_KEY_3": "key-3",
-    })
-    @patch('keycycle.multi_client_wrapper.load_dotenv')
+    @patch.dict(
+        os.environ,
+        {
+            "NUM_SPARSE": "5",
+            "SPARSE_API_KEY_1": "key-1",
+            "SPARSE_API_KEY_3": "key-3",
+        },
+    )
+    @patch("keycycle.core.utils.load_dotenv")
     def test_load_keys_logs_warning_on_count_mismatch(self, mock_dotenv):
         """A mismatch between NUM_{PROVIDER} and keys found is logged loudly."""
-        with self.assertLogs('keycycle.core.utils', level='WARNING') as ctx:
+        with self.assertLogs("keycycle.core.utils", level="WARNING") as ctx:
             keys = MultiClientWrapper.load_api_keys("sparse")
 
         self.assertEqual(keys, ["key-1", "key-3"])
@@ -392,7 +411,7 @@ class TestKwargFiltering(unittest.TestCase):
         valid = get_valid_constructor_kwargs(StrictClient)
 
         self.assertIsNotNone(valid)
-        self.assertEqual(valid, frozenset({'api_key', 'timeout'}))
+        self.assertEqual(valid, frozenset({"api_key", "timeout"}))
 
     def test_get_valid_constructor_kwargs_with_var_kwargs(self):
         """Test introspection returns None when client accepts **kwargs."""
@@ -417,9 +436,9 @@ class TestKwargFiltering(unittest.TestCase):
         valid = get_valid_constructor_kwargs(KeywordOnlyClient)
 
         self.assertIsNotNone(valid)
-        self.assertEqual(valid, frozenset({'api_key', 'timeout', 'retry'}))
+        self.assertEqual(valid, frozenset({"api_key", "timeout", "retry"}))
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_excluded_kwargs_filters_params(self, mock_db_class):
         """Test that excluded_kwargs filters out specified params."""
         mock_db_class.return_value = MagicMock()
@@ -453,14 +472,14 @@ class TestKwargFiltering(unittest.TestCase):
         key_usage = manager.keys[0]
 
         # Directly call _get_fresh_client to test filtering
-        fresh_client = client._get_fresh_client(key_usage)
+        client._get_fresh_client(key_usage)
 
         self.assertNotIn("model", received_kwargs)
         self.assertNotIn("timeout", received_kwargs)
         self.assertIn("other_param", received_kwargs)
         self.assertEqual(received_kwargs["other_param"], "should-remain")
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_introspection_filters_unknown_kwargs(self, mock_db_class):
         """Test that introspection filters kwargs not in constructor."""
         mock_db_class.return_value = MagicMock()
@@ -470,7 +489,7 @@ class TestKwargFiltering(unittest.TestCase):
 
         class StrictClient:
             def __init__(self, api_key: str, timeout: int = 30):
-                received_kwargs.update({'api_key': api_key, 'timeout': timeout})
+                received_kwargs.update({"api_key": api_key, "timeout": timeout})
 
         wrapper = MultiClientWrapper()
         wrapper.register_provider(
@@ -490,7 +509,7 @@ class TestKwargFiltering(unittest.TestCase):
         # Trigger client creation
         manager = wrapper._managers["test"]
         key_usage = manager.keys[0]
-        fresh_client = client._get_fresh_client(key_usage)
+        client._get_fresh_client(key_usage)
 
         self.assertIn("api_key", received_kwargs)
         self.assertIn("timeout", received_kwargs)
@@ -500,7 +519,7 @@ class TestKwargFiltering(unittest.TestCase):
         self.assertNotIn("unknown_param", received_kwargs)
         self.assertNotIn("organization", received_kwargs)
 
-    @patch('keycycle.multi_client_wrapper.UsageDatabase')
+    @patch("keycycle.multi_client_wrapper.UsageDatabase")
     def test_excluded_kwargs_applied_before_introspection(self, mock_db_class):
         """Test that manual exclusion is applied before introspection."""
         mock_db_class.return_value = MagicMock()
@@ -511,7 +530,7 @@ class TestKwargFiltering(unittest.TestCase):
 
         class StrictClient:
             def __init__(self, api_key: str, timeout: int = 30):
-                passed_kwargs.append(set(locals().keys()) - {'self'})
+                passed_kwargs.append(set(locals().keys()) - {"self"})
 
         wrapper = MultiClientWrapper()
         wrapper.register_provider(
@@ -529,7 +548,7 @@ class TestKwargFiltering(unittest.TestCase):
         )
 
         manager = wrapper._managers["test"]
-        key_usage = manager.keys[0]
+        manager.keys[0]
 
         # Directly check what final_kwargs would be by inspecting the config
         # The excluded_kwargs should filter out timeout
@@ -537,10 +556,10 @@ class TestKwargFiltering(unittest.TestCase):
 
         # Also verify the config has valid_kwargs from introspection
         self.assertIsNotNone(client.config.valid_kwargs)
-        self.assertEqual(client.config.valid_kwargs, frozenset({'api_key', 'timeout'}))
+        self.assertEqual(client.config.valid_kwargs, frozenset({"api_key", "timeout"}))
 
         # And verify excluded_kwargs contains what we specified
-        self.assertEqual(client.config.excluded_kwargs, frozenset({'timeout'}))
+        self.assertEqual(client.config.excluded_kwargs, frozenset({"timeout"}))
 
 
 class TestProviderEnvConfigExcludedKwargs(unittest.TestCase):
@@ -560,5 +579,5 @@ class TestProviderEnvConfigExcludedKwargs(unittest.TestCase):
         self.assertEqual(config.excluded_kwargs, ["model", "timeout"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
