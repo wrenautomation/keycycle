@@ -7,27 +7,28 @@ the new 402/payment_required rotation trigger: a key whose free-tier
 quota/credits are exhausted should be marked dead and excluded from rotation
 for the rest of the process, instead of aborting the whole run.
 """
+
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
-import sys
-import os
 
 # Add project root to sys.path to ensure imports work
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
-    from keycycle.core.utils import is_payment_required_error, is_rate_limit_error
+    from keycycle.adapters.openai_adapter import RotatingOpenAIClient
     from keycycle.config.dataclasses import KeyUsage, RateLimits
     from keycycle.config.enums import RateLimitStrategy
+    from keycycle.core.utils import is_payment_required_error, is_rate_limit_error
     from keycycle.key_rotation.rotation_manager import RotatingKeyManager
-    from keycycle.adapters.openai_adapter import RotatingOpenAIClient
 except ImportError:
     # Fallback for different path structures or if run directly
-    from keycycle.keycycle.core.utils import is_payment_required_error, is_rate_limit_error
+    from keycycle.keycycle.adapters.openai_adapter import RotatingOpenAIClient
     from keycycle.keycycle.config.dataclasses import KeyUsage, RateLimits
     from keycycle.keycycle.config.enums import RateLimitStrategy
+    from keycycle.keycycle.core.utils import is_payment_required_error, is_rate_limit_error
     from keycycle.keycycle.key_rotation.rotation_manager import RotatingKeyManager
-    from keycycle.keycycle.adapters.openai_adapter import RotatingOpenAIClient
 
 
 class MockAPIError(Exception):
@@ -65,7 +66,9 @@ class TestPaymentRequiredDetection(unittest.TestCase):
 
     def test_body_detection(self):
         """Test detection via body content when the top-level message is generic."""
-        e = MockAPIError("Provider returned error", body={"message": "Payment Required", "code": 402})
+        e = MockAPIError(
+            "Provider returned error", body={"message": "Payment Required", "code": 402}
+        )
         self.assertTrue(is_payment_required_error(e), "Failed body check")
 
     def test_non_payment_error_returns_false(self):
@@ -76,7 +79,9 @@ class TestPaymentRequiredDetection(unittest.TestCase):
     def test_429_is_not_payment_required(self):
         """A 429 rate limit must not be misclassified as a 402."""
         e = MockAPIError("Rate limit exceeded", status_code=429)
-        self.assertFalse(is_payment_required_error(e), "429 incorrectly flagged as payment_required")
+        self.assertFalse(
+            is_payment_required_error(e), "429 incorrectly flagged as payment_required"
+        )
 
     def test_402_is_not_rate_limit(self):
         """A 402 must not be misclassified as a 429 rate limit (no overlap)."""
@@ -88,7 +93,9 @@ class TestKeyUsageMarkDead(unittest.TestCase):
     """Test the KeyUsage.mark_dead() / is_cooling_down() dead-key mechanism."""
 
     def setUp(self):
-        self.key = KeyUsage(api_key="sk-test-dead-key-xxxxxxxx", strategy=RateLimitStrategy.PER_MODEL)
+        self.key = KeyUsage(
+            api_key="sk-test-dead-key-xxxxxxxx", strategy=RateLimitStrategy.PER_MODEL
+        )
 
     def test_fresh_key_is_not_cooling_down(self):
         self.assertFalse(self.key.is_cooling_down())
@@ -209,6 +216,7 @@ class TestOpenAIAdapter402Rotation(unittest.TestCase):
 
     def _fake_client_factory(self, dead_key_suffixes):
         """Build fake OpenAI-shaped clients whose create() 402s for dead keys."""
+
         def factory(api_key):
             fake = MagicMock()
             suffix = api_key[-8:]
@@ -221,14 +229,19 @@ class TestOpenAIAdapter402Rotation(unittest.TestCase):
                 response.usage.total_tokens = 42
                 fake.chat.completions.create.return_value = response
             return fake
+
         return factory
 
     def test_rotates_past_dead_keys_to_a_live_one(self):
         """Two keys 402, the third succeeds - the request should still succeed."""
-        with patch.object(
-            self.client, "_get_fresh_client",
-            side_effect=self._fake_client_factory({"AAAAAAAA", "BBBBBBBB"})
-        ), patch("keycycle.adapters.openai_adapter.time.sleep"):
+        with (
+            patch.object(
+                self.client,
+                "_get_fresh_client",
+                side_effect=self._fake_client_factory({"AAAAAAAA", "BBBBBBBB"}),
+            ),
+            patch("keycycle.adapters.openai_adapter.time.sleep"),
+        ):
             result = self.client.chat.completions.create(model="test-model")
 
         self.assertEqual(result.usage.total_tokens, 42)
@@ -238,10 +251,14 @@ class TestOpenAIAdapter402Rotation(unittest.TestCase):
 
     def test_all_keys_dead_raises_clearly_without_hanging(self):
         """If every key 402s, the error must surface clearly - no infinite loop."""
-        with patch.object(
-            self.client, "_get_fresh_client",
-            side_effect=self._fake_client_factory({"AAAAAAAA", "BBBBBBBB", "CCCCCCCC"})
-        ), patch("keycycle.adapters.openai_adapter.time.sleep"):
+        with (
+            patch.object(
+                self.client,
+                "_get_fresh_client",
+                side_effect=self._fake_client_factory({"AAAAAAAA", "BBBBBBBB", "CCCCCCCC"}),
+            ),
+            patch("keycycle.adapters.openai_adapter.time.sleep"),
+        ):
             with self.assertRaises(Exception):
                 self.client.chat.completions.create(model="test-model")
 
@@ -249,5 +266,5 @@ class TestOpenAIAdapter402Rotation(unittest.TestCase):
         self.assertTrue(all(k.dead for k in self.manager.keys))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

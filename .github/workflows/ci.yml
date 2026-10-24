@@ -1,0 +1,18 @@
+# Every push and pull request: ruff (lint and format, the config in keycycle/pyproject.toml) and pytest.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: pip install -e "keycycle[test,all]" ruff google-genai
+      - run: ruff check keycycle && ruff format --check keycycle
+      - run: pytest -q keycycle

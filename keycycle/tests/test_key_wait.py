@@ -5,13 +5,14 @@ One production key at its per-minute cap (Cohere, emails_gen pilot
 2026-09-07) used to surface as "No available keys" after the first
 window filled, aborting a 2,000-document run 20 calls in.
 """
+
+import os
+import sys
 import time
 import unittest
 from unittest.mock import MagicMock
-import sys
-import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
     from keycycle.config.dataclasses import RateLimits
@@ -69,7 +70,9 @@ class TestAcquireKey(unittest.TestCase):
         manager = _manager(["sk-only-key-AAAAAAAA"], cooldown_seconds=60)
         manager.keys[0].trigger_cooldown()
         started = time.monotonic()
-        self.assertIsNone(manager.acquire_key("m", self.limits, 10, max_wait_seconds=0.3, poll_seconds=0.1))
+        self.assertIsNone(
+            manager.acquire_key("m", self.limits, 10, max_wait_seconds=0.3, poll_seconds=0.1)
+        )
         self.assertLess(time.monotonic() - started, 2)
         self.assertIn("rate-limited or cooling down", manager.unavailable_message("m"))
 

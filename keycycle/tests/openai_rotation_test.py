@@ -2,9 +2,11 @@
 Integration tests for OpenAI client rate limit rotation.
 Tests that the local rate limiter correctly blocks requests at limits.
 """
+
 import asyncio
-import pytest
 from pathlib import Path
+
+import pytest
 
 from keycycle import MultiProviderWrapper
 
@@ -20,9 +22,7 @@ class TestOpenAIRotation:
         """Create Gemini wrapper for rate limit testing."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='gemini',
-                default_model_id='gemini-2.5-flash',
-                env_file=ENV_FILE
+                provider="gemini", default_model_id="gemini-2.5-flash", env_file=ENV_FILE
             )
             yield wrapper
             wrapper.manager.stop()
@@ -35,7 +35,7 @@ class TestOpenAIRotation:
         limits_config = provider_limits.get(model_id)
 
         if not limits_config:
-            limits_config = provider_limits.get('default')
+            limits_config = provider_limits.get("default")
 
         if not limits_config:
             return None
@@ -47,7 +47,7 @@ class TestOpenAIRotation:
     async def test_gemini_rate_limit_enforcement(self, gemini_wrapper):
         """Test that local rate limiter enforces request limits."""
         limit_value = self._get_limit_value(
-            gemini_wrapper, 'gemini', 'gemini-2.5-flash', 'requests_per_minute'
+            gemini_wrapper, "gemini", "gemini-2.5-flash", "requests_per_minute"
         )
 
         if limit_value is None:
@@ -58,20 +58,17 @@ class TestOpenAIRotation:
 
         client = gemini_wrapper.get_async_openai_client()
         successful_requests = 0
-        blocked_by_limiter = False
 
         for i in range(test_requests):
             try:
-                response = await client.chat.completions.create(
-                    messages=[{"role": "user", "content": "hi"}],
-                    max_tokens=5
+                await client.chat.completions.create(
+                    messages=[{"role": "user", "content": "hi"}], max_tokens=5
                 )
                 successful_requests += 1
                 await asyncio.sleep(0.5)
 
             except RuntimeError as e:
                 if "No available keys" in str(e) or "Timeout" in str(e):
-                    blocked_by_limiter = True
                     break
                 raise
             except Exception:
@@ -100,8 +97,7 @@ class TestOpenAIRotation:
         for _ in range(3):
             try:
                 await client.chat.completions.create(
-                    messages=[{"role": "user", "content": "hi"}],
-                    max_tokens=5
+                    messages=[{"role": "user", "content": "hi"}], max_tokens=5
                 )
                 await asyncio.sleep(0.5)
             except Exception:
@@ -121,8 +117,7 @@ class TestOpenAIRotation:
 
         try:
             client.chat.completions.create(
-                messages=[{"role": "user", "content": "test"}],
-                max_tokens=5
+                messages=[{"role": "user", "content": "test"}], max_tokens=5
             )
         except Exception:
             pytest.skip("Could not make test request")
@@ -130,4 +125,4 @@ class TestOpenAIRotation:
         # Stats should be available
         stats = gemini_wrapper.manager.get_global_stats()
         assert stats is not None
-        assert hasattr(stats, 'total')
+        assert hasattr(stats, "total")

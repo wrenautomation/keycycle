@@ -9,36 +9,32 @@ import asyncio
 import inspect
 import logging
 import time
+from collections.abc import AsyncGenerator, Generator
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
-    FrozenSet,
-    Generator,
     Generic,
-    List,
     Optional,
-    Type,
     TypeVar,
     Union,
 )
 
-from ..config.dataclasses import KeyUsage, RateLimits
 from ..config.constants import (
-    TEMP_RATE_LIMIT_MAX_RETRIES,
+    KEY_ROTATION_DELAY_SECONDS,
     TEMP_RATE_LIMIT_INITIAL_DELAY,
     TEMP_RATE_LIMIT_MAX_DELAY,
+    TEMP_RATE_LIMIT_MAX_RETRIES,
     TEMP_RATE_LIMIT_MULTIPLIER,
-    KEY_ROTATION_DELAY_SECONDS,
 )
+from ..config.dataclasses import KeyUsage, RateLimits
+from ..core.backoff import BackoffConfig, ExponentialBackoff
 from ..core.utils import (
+    get_key_suffix,
+    is_dead_key_error,
     is_rate_limit_error,
     is_temporary_rate_limit_error,
-    is_dead_key_error,
-    get_key_suffix,
 )
-from ..core.backoff import ExponentialBackoff, BackoffConfig
 from ..key_rotation.rotation_manager import RotatingKeyManager
 
 logger = logging.getLogger(__name__)
@@ -46,7 +42,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def detect_async_client(client_class: Type) -> bool:
+def detect_async_client(client_class: type) -> bool:
     """
     Auto-detect if a client class is async.
 
@@ -153,7 +149,7 @@ def default_usage_extractor(response: Any) -> int:
     return 0
 
 
-def get_valid_constructor_kwargs(client_class: Type) -> Optional[FrozenSet[str]]:
+def get_valid_constructor_kwargs(client_class: type) -> Optional[frozenset[str]]:
     """
     Inspect client class to determine valid constructor kwargs.
 
@@ -170,7 +166,7 @@ def get_valid_constructor_kwargs(client_class: Type) -> Optional[FrozenSet[str]]
     valid_kwargs = set()
 
     for name, param in params.items():
-        if name == 'self':
+        if name == "self":
             continue
         if param.kind == inspect.Parameter.VAR_KEYWORD:
             return None  # Accepts **kwargs, can't filter
@@ -187,7 +183,7 @@ def get_valid_constructor_kwargs(client_class: Type) -> Optional[FrozenSet[str]]
 class GenericClientConfig:
     """Configuration for a generic rotating client."""
 
-    client_class: Type
+    client_class: type
     """The client class to wrap (e.g., Anthropic, TwelveLabs)"""
 
     api_key_param: str = "api_key"
@@ -211,10 +207,10 @@ class GenericClientConfig:
     client_kwargs: dict = field(default_factory=dict)
     """Additional kwargs to pass to the client constructor"""
 
-    excluded_kwargs: FrozenSet[str] = field(default_factory=frozenset)
+    excluded_kwargs: frozenset[str] = field(default_factory=frozenset)
     """Kwargs to explicitly exclude from client constructor (manual exclusion layer)"""
 
-    valid_kwargs: Optional[FrozenSet[str]] = None
+    valid_kwargs: Optional[frozenset[str]] = None
     """Valid constructor kwargs from introspection. None means accept all (client uses **kwargs)."""
 
 
@@ -253,22 +249,19 @@ class BaseGenericRotatingClient(Generic[T]):
         # Layer 1: Apply manual exclusions
         if self.config.excluded_kwargs:
             merged_kwargs = {
-                k: v for k, v in merged_kwargs.items()
-                if k not in self.config.excluded_kwargs
+                k: v for k, v in merged_kwargs.items() if k not in self.config.excluded_kwargs
             }
 
         # Layer 2: Apply introspection filter (if available)
         if self.config.valid_kwargs is not None:
-            final_kwargs = {
-                k: v for k, v in merged_kwargs.items()
-                if k in self.config.valid_kwargs
-            }
+            final_kwargs = {k: v for k, v in merged_kwargs.items() if k in self.config.valid_kwargs}
             # Log filtered kwargs for debugging
             filtered = set(merged_kwargs.keys()) - set(final_kwargs.keys())
             if filtered:
                 logger.debug(
                     "Introspection filtered kwargs for %s: %s",
-                    self.config.client_class.__name__, filtered
+                    self.config.client_class.__name__,
+                    filtered,
                 )
         else:
             final_kwargs = merged_kwargs
@@ -306,7 +299,7 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
     def __getattr__(self, name: str) -> "SyncGenericProxyHelper":
         return SyncGenericProxyHelper(self, [name])
 
-    def _execute(self, path: List[str], args: tuple, kwargs: dict) -> Any:
+    def _execute(self, path: list[str], args: tuple, kwargs: dict) -> Any:
         """Execute a method call with key rotation."""
         # Per-call tracking override - popped before the kwargs reach the real
         # client, which may reject unknown keyword arguments.
@@ -320,11 +313,13 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                 raise RuntimeError(self.manager.unavailable_message(model_id))
 
             # Create backoff for temporary rate limits
-            temp_backoff = ExponentialBackoff(BackoffConfig(
-                initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
-                max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
-                multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
-            ))
+            temp_backoff = ExponentialBackoff(
+                BackoffConfig(
+                    initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
+                    max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
+                    multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
+                )
+            )
 
             for temp_attempt in range(TEMP_RATE_LIMIT_MAX_RETRIES + 1):
                 try:
@@ -338,7 +333,9 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                     result = target(*args, **kwargs)
 
                     # Handle streaming responses
-                    if hasattr(result, "__iter__") and not isinstance(result, (str, bytes, dict, list)):
+                    if hasattr(result, "__iter__") and not isinstance(
+                        result, (str, bytes, dict, list)
+                    ):
                         # Check if it looks like a generator/iterator
                         if hasattr(result, "__next__") or inspect.isgenerator(result):
                             return self._wrap_stream(result, key_usage, model_id, track_usage)
@@ -350,12 +347,18 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
 
                 except Exception as e:
                     # Check for temporary rate limit first - retry with SAME key
-                    if is_temporary_rate_limit_error(e) and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES:
+                    if (
+                        is_temporary_rate_limit_error(e)
+                        and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
+                    ):
                         delay = temp_backoff.get_next_interval()
                         logger.info(
                             "Temporary rate limit on key ...%s for %s. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(key_usage.api_key), model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(key_usage.api_key),
+                            model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         time.sleep(delay)
                         continue  # Retry with SAME key
@@ -365,8 +368,10 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                     if is_dead_key_error(e) and attempt < self.config.max_retries:
                         logger.warning(
                             "Dead key (401/402/403) hit for %s on key ...%s. Marking key dead and rotating. (Attempt %d/%d)",
-                            model_id, get_key_suffix(key_usage.api_key),
-                            attempt + 1, self.config.max_retries + 1
+                            model_id,
+                            get_key_suffix(key_usage.api_key),
+                            attempt + 1,
+                            self.config.max_retries + 1,
                         )
                         key_usage.mark_dead()
                         self.manager.force_rotate_index()
@@ -377,8 +382,10 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                     if is_rate_limit_error(e) and attempt < self.config.max_retries:
                         logger.warning(
                             "429/RateLimit hit for %s on key ...%s. Rotating. (Attempt %d/%d)",
-                            model_id, get_key_suffix(key_usage.api_key),
-                            attempt + 1, self.config.max_retries + 1
+                            model_id,
+                            get_key_suffix(key_usage.api_key),
+                            attempt + 1,
+                            self.config.max_retries + 1,
                         )
                         key_usage.trigger_cooldown()
                         self.manager.force_rotate_index()
@@ -392,7 +399,7 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                 if attempt < self.config.max_retries:
                     logger.warning(
                         "Temporary rate limit retries exhausted for key ...%s. Rotating.",
-                        get_key_suffix(key_usage.api_key)
+                        get_key_suffix(key_usage.api_key),
                     )
                     key_usage.trigger_cooldown()
                     self.manager.force_rotate_index()
@@ -420,14 +427,16 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
             if is_dead_key_error(e):
                 logger.warning(
                     "Dead key (401/402/403) hit during streaming for %s on key ...%s. Marking key dead.",
-                    model_id, get_key_suffix(key_usage.api_key)
+                    model_id,
+                    get_key_suffix(key_usage.api_key),
                 )
                 key_usage.mark_dead()
                 self.manager.force_rotate_index()
             elif is_rate_limit_error(e):
                 logger.warning(
                     "Rate limit hit during streaming for %s on key ...%s.",
-                    model_id, get_key_suffix(key_usage.api_key)
+                    model_id,
+                    get_key_suffix(key_usage.api_key),
                 )
                 key_usage.trigger_cooldown()
                 self.manager.force_rotate_index()
@@ -439,7 +448,7 @@ class SyncGenericRotatingClient(BaseGenericRotatingClient[T]):
 class SyncGenericProxyHelper:
     """Helper class to build attribute path chains for sync clients."""
 
-    def __init__(self, client: SyncGenericRotatingClient, path: List[str]):
+    def __init__(self, client: SyncGenericRotatingClient, path: list[str]):
         self.client = client
         self.path = path
 
@@ -456,7 +465,7 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
     def __getattr__(self, name: str) -> "AsyncGenericProxyHelper":
         return AsyncGenericProxyHelper(self, [name])
 
-    async def _execute(self, path: List[str], args: tuple, kwargs: dict) -> Any:
+    async def _execute(self, path: list[str], args: tuple, kwargs: dict) -> Any:
         """Execute a method call with key rotation (async)."""
         # Per-call tracking override - popped before the kwargs reach the real
         # client, which may reject unknown keyword arguments.
@@ -465,16 +474,20 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
         limits = self.limit_resolver(model_id, None)
 
         for attempt in range(self.config.max_retries + 1):
-            key_usage = await self.manager.acquire_key_async(model_id, limits, self.config.estimated_tokens)
+            key_usage = await self.manager.acquire_key_async(
+                model_id, limits, self.config.estimated_tokens
+            )
             if not key_usage:
                 raise RuntimeError(self.manager.unavailable_message(model_id))
 
             # Create backoff for temporary rate limits
-            temp_backoff = ExponentialBackoff(BackoffConfig(
-                initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
-                max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
-                multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
-            ))
+            temp_backoff = ExponentialBackoff(
+                BackoffConfig(
+                    initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
+                    max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
+                    multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
+                )
+            )
 
             for temp_attempt in range(TEMP_RATE_LIMIT_MAX_RETRIES + 1):
                 try:
@@ -498,12 +511,18 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
 
                 except Exception as e:
                     # Check for temporary rate limit first - retry with SAME key
-                    if is_temporary_rate_limit_error(e) and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES:
+                    if (
+                        is_temporary_rate_limit_error(e)
+                        and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
+                    ):
                         delay = temp_backoff.get_next_interval()
                         logger.info(
                             "Temporary rate limit on key ...%s for %s. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(key_usage.api_key), model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(key_usage.api_key),
+                            model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         await asyncio.sleep(delay)
                         continue  # Retry with SAME key
@@ -513,8 +532,10 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                     if is_dead_key_error(e) and attempt < self.config.max_retries:
                         logger.warning(
                             "Dead key (401/402/403) hit for %s on key ...%s. Marking key dead and rotating. (Attempt %d/%d)",
-                            model_id, get_key_suffix(key_usage.api_key),
-                            attempt + 1, self.config.max_retries + 1
+                            model_id,
+                            get_key_suffix(key_usage.api_key),
+                            attempt + 1,
+                            self.config.max_retries + 1,
                         )
                         key_usage.mark_dead()
                         self.manager.force_rotate_index()
@@ -525,8 +546,10 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                     if is_rate_limit_error(e) and attempt < self.config.max_retries:
                         logger.warning(
                             "429/RateLimit hit for %s on key ...%s. Rotating. (Attempt %d/%d)",
-                            model_id, get_key_suffix(key_usage.api_key),
-                            attempt + 1, self.config.max_retries + 1
+                            model_id,
+                            get_key_suffix(key_usage.api_key),
+                            attempt + 1,
+                            self.config.max_retries + 1,
                         )
                         key_usage.trigger_cooldown()
                         self.manager.force_rotate_index()
@@ -540,7 +563,7 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
                 if attempt < self.config.max_retries:
                     logger.warning(
                         "Temporary rate limit retries exhausted for key ...%s. Rotating.",
-                        get_key_suffix(key_usage.api_key)
+                        get_key_suffix(key_usage.api_key),
                     )
                     key_usage.trigger_cooldown()
                     self.manager.force_rotate_index()
@@ -568,14 +591,16 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
             if is_dead_key_error(e):
                 logger.warning(
                     "Dead key (401/402/403) hit during streaming for %s on key ...%s. Marking key dead.",
-                    model_id, get_key_suffix(key_usage.api_key)
+                    model_id,
+                    get_key_suffix(key_usage.api_key),
                 )
                 key_usage.mark_dead()
                 self.manager.force_rotate_index()
             elif is_rate_limit_error(e):
                 logger.warning(
                     "Rate limit hit during streaming for %s on key ...%s.",
-                    model_id, get_key_suffix(key_usage.api_key)
+                    model_id,
+                    get_key_suffix(key_usage.api_key),
                 )
                 key_usage.trigger_cooldown()
                 self.manager.force_rotate_index()
@@ -587,7 +612,7 @@ class AsyncGenericRotatingClient(BaseGenericRotatingClient[T]):
 class AsyncGenericProxyHelper:
     """Helper class to build attribute path chains for async clients."""
 
-    def __init__(self, client: AsyncGenericRotatingClient, path: List[str]):
+    def __init__(self, client: AsyncGenericRotatingClient, path: list[str]):
         self.client = client
         self.path = path
 
@@ -599,7 +624,7 @@ class AsyncGenericProxyHelper:
 
 
 def create_rotating_client(
-    client_class: Type[T],
+    client_class: type[T],
     manager: RotatingKeyManager,
     limit_resolver: Callable[[str, Optional[str]], RateLimits],
     default_model: str,
@@ -609,7 +634,7 @@ def create_rotating_client(
     estimated_tokens: int = 1000,
     max_retries: int = 5,
     model_param: str = "model",
-    excluded_kwargs: Optional[List[str]] = None,
+    excluded_kwargs: Optional[list[str]] = None,
     **client_kwargs,
 ) -> Union[SyncGenericRotatingClient[T], AsyncGenericRotatingClient[T]]:
     """

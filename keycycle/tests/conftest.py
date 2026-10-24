@@ -1,11 +1,12 @@
 """
 Shared pytest fixtures and configuration for keycycle tests.
 """
+
 import os
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-from typing import List
+from unittest.mock import MagicMock
+
+import pytest
 
 # Path to local.env for integration tests
 LOCAL_ENV_PATH = Path(__file__).parent / "local.env"
@@ -18,6 +19,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: marks slow-running tests")
     if LOCAL_ENV_PATH.exists():
         from dotenv import load_dotenv
+
         load_dotenv(dotenv_path=LOCAL_ENV_PATH, override=True)
 
 
@@ -46,13 +48,14 @@ def load_env():
     """Load environment variables from local.env if it exists."""
     if LOCAL_ENV_PATH.exists():
         from dotenv import load_dotenv
+
         load_dotenv(dotenv_path=LOCAL_ENV_PATH, override=True)
         return True
     return False
 
 
 @pytest.fixture
-def mock_api_keys() -> List[str]:
+def mock_api_keys() -> list[str]:
     """Provide mock API keys for unit testing."""
     return [
         "sk-test-key-1-alpha-xxxxxxxxxxxxxxxx",
@@ -92,8 +95,7 @@ def mock_key_usage():
     from keycycle.config.enums import RateLimitStrategy
 
     return KeyUsage(
-        api_key="sk-test-key-mock-xxxxxxxxxxxxxxxx",
-        strategy=RateLimitStrategy.PER_MODEL
+        api_key="sk-test-key-mock-xxxxxxxxxxxxxxxx", strategy=RateLimitStrategy.PER_MODEL
     )
 
 
@@ -124,16 +126,13 @@ def has_provider_keys(provider: str) -> bool:
 
 # Skip decorators for use in test files
 skip_without_cohere = pytest.mark.skipif(
-    not has_provider_keys("cohere"),
-    reason="Requires COHERE API keys in local.env"
+    not has_provider_keys("cohere"), reason="Requires COHERE API keys in local.env"
 )
 
 skip_without_groq = pytest.mark.skipif(
-    not has_provider_keys("groq"),
-    reason="Requires GROQ API keys in local.env"
+    not has_provider_keys("groq"), reason="Requires GROQ API keys in local.env"
 )
 
 skip_without_gemini = pytest.mark.skipif(
-    not has_provider_keys("gemini"),
-    reason="Requires GEMINI API keys in local.env"
+    not has_provider_keys("gemini"), reason="Requires GEMINI API keys in local.env"
 )

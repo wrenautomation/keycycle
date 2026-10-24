@@ -1,14 +1,17 @@
 """Custom exception hierarchy for keycycle."""
-from typing import Any, Optional
+
+from typing import Any
 
 
 class KeycycleError(Exception):
     """Base exception for all keycycle errors."""
+
     pass
 
 
 class KeycycleKeyError(KeycycleError):
     """Base for key-related errors."""
+
     pass
 
 
@@ -22,7 +25,7 @@ class NoAvailableKeyError(KeycycleKeyError):
         wait: bool,
         timeout: float,
         total_keys: int = 0,
-        cooling_down: int = 0
+        cooling_down: int = 0,
     ):
         self.provider = provider
         self.model_id = model_id
@@ -66,13 +69,12 @@ class RateLimitError(KeycycleError):
         self.provider = provider
         self.model_id = model_id
         self.attempts = attempts
-        super().__init__(
-            f"Rate limit exceeded for {provider}/{model_id} after {attempts} attempts"
-        )
+        super().__init__(f"Rate limit exceeded for {provider}/{model_id} after {attempts} attempts")
 
 
 class ConfigurationError(KeycycleError):
     """Raised for configuration-related errors."""
+
     pass
 
 

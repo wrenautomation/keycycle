@@ -2,11 +2,11 @@
 Unit tests for concurrent SQLite database operations.
 Tests thread safety of UsageDatabase and AsyncUsageLogger.
 """
-import os
-import time
+
 import threading
+import time
+
 import pytest
-from pathlib import Path
 
 from keycycle.usage.db_logic import UsageDatabase
 from keycycle.usage.usage_logger import AsyncUsageLogger
@@ -48,7 +48,7 @@ class TestSqliteConcurrency:
             """Read history multiple times while logging."""
             try:
                 for i in range(5):
-                    history = db.load_history(provider, api_key, seconds_lookback=60)
+                    db.load_history(provider, api_key, seconds_lookback=60)
                     time.sleep(0.2)
             except Exception as e:
                 errors.append(f"Reader error: {e}")

@@ -2,8 +2,10 @@
 Integration tests for OpenAI-compatible client interface.
 Tests sync/async clients and streaming across multiple providers.
 """
-import pytest
+
 from pathlib import Path
+
+import pytest
 
 from keycycle import MultiProviderWrapper
 
@@ -19,9 +21,9 @@ class TestOpenAIClientInterface:
         """Create OpenRouter wrapper with free model."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='openrouter',
-                default_model_id='mistralai/devstral-2512:free',
-                env_file=ENV_PATH
+                provider="openrouter",
+                default_model_id="mistralai/devstral-2512:free",
+                env_file=ENV_PATH,
             )
             yield wrapper
             wrapper.manager.stop()
@@ -33,9 +35,7 @@ class TestOpenAIClientInterface:
         """Create Cerebras wrapper."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='cerebras',
-                default_model_id='gpt-oss-120b',
-                env_file=ENV_PATH
+                provider="cerebras", default_model_id="gpt-oss-120b", env_file=ENV_PATH
             )
             yield wrapper
             wrapper.manager.stop()
@@ -47,9 +47,7 @@ class TestOpenAIClientInterface:
         """Create Groq wrapper."""
         try:
             wrapper = MultiProviderWrapper.from_env(
-                provider='groq',
-                default_model_id='llama-3.1-8b-instant',
-                env_file=ENV_PATH
+                provider="groq", default_model_id="llama-3.1-8b-instant", env_file=ENV_PATH
             )
             yield wrapper
             wrapper.manager.stop()
@@ -92,8 +90,7 @@ class TestOpenAIClientInterface:
         async_client = openrouter_wrapper.get_async_openai_client()
 
         stream = await async_client.chat.completions.create(
-            messages=[{"role": "user", "content": "Count to 5"}],
-            stream=True
+            messages=[{"role": "user", "content": "Count to 5"}], stream=True
         )
 
         chunks_received = 0

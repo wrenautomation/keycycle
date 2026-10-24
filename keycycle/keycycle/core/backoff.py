@@ -1,15 +1,17 @@
 """Exponential backoff utilities for key rotation."""
+
 import random
 import time
 from dataclasses import dataclass
 from typing import Optional
 
-from ..config.constants import DEFAULT_POLL_INTERVAL, MIN_POLL_INTERVAL, MAX_POLL_INTERVAL
+from ..config.constants import DEFAULT_POLL_INTERVAL, MAX_POLL_INTERVAL, MIN_POLL_INTERVAL
 
 
 @dataclass
 class BackoffConfig:
     """Configuration for exponential backoff."""
+
     initial_interval: float = DEFAULT_POLL_INTERVAL
     max_interval: float = MAX_POLL_INTERVAL
     multiplier: float = 2.0

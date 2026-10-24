@@ -2,30 +2,33 @@ import asyncio
 import functools
 import logging
 import time
-from typing import AsyncIterator, Iterator, Optional, Union, TYPE_CHECKING
+from collections.abc import AsyncIterator, Iterator
+from typing import TYPE_CHECKING, Optional, Union
 
-from ..config.dataclasses import KeyUsage
-from ..config.log_config import default_logger
 from ..config.constants import (
-    TEMP_RATE_LIMIT_MAX_RETRIES,
     TEMP_RATE_LIMIT_INITIAL_DELAY,
     TEMP_RATE_LIMIT_MAX_DELAY,
+    TEMP_RATE_LIMIT_MAX_RETRIES,
     TEMP_RATE_LIMIT_MULTIPLIER,
 )
+from ..config.dataclasses import KeyUsage
+from ..config.log_config import default_logger
+from ..core.backoff import BackoffConfig, ExponentialBackoff
 from ..core.utils import (
+    get_key_suffix,
+    is_dead_key_error,
     is_rate_limit_error,
     is_temporary_rate_limit_error,
-    is_dead_key_error,
-    get_key_suffix,
 )
-from ..core.backoff import ExponentialBackoff, BackoffConfig
+
 if TYPE_CHECKING:
     from agno.models.response import ModelResponse
 
 
 class _UsageResponse:
     """Minimal response holder for usage recording when agno is not available."""
-    __slots__ = ('response_usage',)
+
+    __slots__ = ("response_usage",)
 
     def __init__(self, usage=None):
         self.response_usage = usage
@@ -35,22 +38,23 @@ class RotatingCredentialsMixin:
     """
     Mixin that handles key rotation, 429 detection, and 30s cooldown triggers.
     """
-    
+
     def __init__(
-        self, 
-        *args, 
+        self,
+        *args,
         model_id: str,
-        wrapper=None, 
-        rotating_wait=True, 
-        rotating_timeout=10.0, 
+        wrapper=None,
+        rotating_wait=True,
+        rotating_timeout=10.0,
         rotating_estimated_tokens=1000,
-        rotating_max_retries=5, 
+        rotating_max_retries=5,
         rotating_fixed_key_id: Union[int, str] = None,
         logger: Optional[logging.Logger] = None,
-        **kwargs):
+        **kwargs,
+    ):
         """
         Initializes rotation parameters and patches the model if necessary.
-        
+
         Args:
             wrapper: The MultiProviderWrapper instance managing keys.
             rotating_wait: Whether to wait for a key if none are available.
@@ -71,11 +75,11 @@ class RotatingCredentialsMixin:
 
     def __init_subclass__(cls, **kwargs):
         """
-        Hook to automatically copy function signatures and docstrings 
+        Hook to automatically copy function signatures and docstrings
         from the parent class to this mixin's wrapper methods.
         """
         super().__init_subclass__(**kwargs)
-        methods_to_sync = ['invoke', 'ainvoke', 'invoke_stream', 'ainvoke_stream']
+        methods_to_sync = ["invoke", "ainvoke", "invoke_stream", "ainvoke_stream"]
         for method_name in methods_to_sync:
             if not hasattr(cls, method_name):
                 continue
@@ -87,12 +91,12 @@ class RotatingCredentialsMixin:
                 if hasattr(parent, method_name) and method_name in parent.__dict__:
                     target_method = getattr(parent, method_name)
                     break
-            
+
             if target_method:
                 mixin_implementation = getattr(cls, method_name)
                 wrapped_method = functools.wraps(target_method)(mixin_implementation)
 
-                if hasattr(target_method, '__signature__'):
+                if hasattr(target_method, "__signature__"):
                     wrapped_method.__signature__ = target_method.__signature__
                 setattr(cls, method_name, wrapped_method)
 
@@ -102,13 +106,16 @@ class RotatingCredentialsMixin:
             estimated_tokens=self._estimated_tokens,
             wait=self._rotating_wait,
             timeout=self._rotating_timeout,
-            key_id=self._fixed_key_id
+            key_id=self._fixed_key_id,
         )
         self.api_key = key_usage.api_key
-        
-        if hasattr(self, "client"): self.client = None
-        if hasattr(self, "async_client"): self.async_client = None
-        if hasattr(self, "gemini_client"): self.gemini_client = None
+
+        if hasattr(self, "client"):
+            self.client = None
+        if hasattr(self, "async_client"):
+            self.async_client = None
+        if hasattr(self, "gemini_client"):
+            self.gemini_client = None
 
         return key_usage
 
@@ -142,16 +149,18 @@ class RotatingCredentialsMixin:
             model_id=self.model_id,
             actual_tokens=actual_tokens,
             estimated_tokens=self._estimated_tokens,
-            track_usage=track_usage
+            track_usage=track_usage,
         )
 
     def _create_temp_backoff(self) -> ExponentialBackoff:
         """Create a backoff instance for temporary rate limit retries."""
-        return ExponentialBackoff(BackoffConfig(
-            initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
-            max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
-            multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
-        ))
+        return ExponentialBackoff(
+            BackoffConfig(
+                initial_interval=TEMP_RATE_LIMIT_INITIAL_DELAY,
+                max_interval=TEMP_RATE_LIMIT_MAX_DELAY,
+                multiplier=TEMP_RATE_LIMIT_MULTIPLIER,
+            )
+        )
 
     def invoke(self, *args, **kwargs) -> "ModelResponse":
         # Per-call tracking override - popped before the kwargs reach the
@@ -170,12 +179,18 @@ class RotatingCredentialsMixin:
                     return response
                 except Exception as e:
                     # Check for temporary rate limit first - retry with SAME key
-                    if is_temporary_rate_limit_error(e) and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES:
+                    if (
+                        is_temporary_rate_limit_error(e)
+                        and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
+                    ):
                         delay = temp_backoff.get_next_interval()
                         self.logger.info(
                             "Temporary rate limit on key %s [%s]. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         time.sleep(delay)
                         continue  # Retry with SAME key
@@ -185,7 +200,10 @@ class RotatingCredentialsMixin:
                     if is_dead_key_error(e) and attempt < limit:
                         self.logger.warning(
                             "Dead key (401/402/403) on key %s (Sync) [%s]. Marking key dead and rotating (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.mark_dead()
                         self.wrapper.manager.force_rotate_index()
@@ -195,7 +213,10 @@ class RotatingCredentialsMixin:
                     if is_rate_limit_error(e) and attempt < limit:
                         self.logger.warning(
                             "429 Hit on key %s (Sync) [%s]. Rotating and retrying (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.trigger_cooldown()
                         self.wrapper.manager.force_rotate_index()
@@ -206,7 +227,7 @@ class RotatingCredentialsMixin:
                 if attempt < limit:
                     self.logger.warning(
                         "Temp rate limit retries exhausted for key %s. Rotating.",
-                        get_key_suffix(self.api_key)
+                        get_key_suffix(self.api_key),
                     )
                     key_usage.trigger_cooldown()
                     self.wrapper.manager.force_rotate_index()
@@ -230,12 +251,18 @@ class RotatingCredentialsMixin:
                     return response
                 except Exception as e:
                     # Check for temporary rate limit first - retry with SAME key
-                    if is_temporary_rate_limit_error(e) and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES:
+                    if (
+                        is_temporary_rate_limit_error(e)
+                        and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
+                    ):
                         delay = temp_backoff.get_next_interval()
                         self.logger.info(
                             "Temporary rate limit on key %s [%s]. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         await asyncio.sleep(delay)
                         continue  # Retry with SAME key
@@ -245,7 +272,10 @@ class RotatingCredentialsMixin:
                     if is_dead_key_error(e) and attempt < limit:
                         self.logger.warning(
                             "Dead key (401/402/403) on key %s (Async) [%s]. Marking key dead and rotating (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.mark_dead()
                         self.wrapper.manager.force_rotate_index()
@@ -255,7 +285,10 @@ class RotatingCredentialsMixin:
                     if is_rate_limit_error(e) and attempt < limit:
                         self.logger.warning(
                             "429 Hit on key %s (Async) [%s]. Rotating and retrying (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.trigger_cooldown()
                         self.wrapper.manager.force_rotate_index()
@@ -266,7 +299,7 @@ class RotatingCredentialsMixin:
                 if attempt < limit:
                     self.logger.warning(
                         "Temp rate limit retries exhausted for key %s. Rotating.",
-                        get_key_suffix(self.api_key)
+                        get_key_suffix(self.api_key),
                     )
                     key_usage.trigger_cooldown()
                     self.wrapper.manager.force_rotate_index()
@@ -303,14 +336,19 @@ class RotatingCredentialsMixin:
                     return
                 except Exception as e:
                     # Only retry temp limits if NO chunks received yet
-                    if (is_temporary_rate_limit_error(e)
+                    if (
+                        is_temporary_rate_limit_error(e)
                         and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
-                        and not chunks_received):
+                        and not chunks_received
+                    ):
                         delay = temp_backoff.get_next_interval()
                         self.logger.info(
                             "Temporary rate limit on key %s (Stream) [%s]. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         time.sleep(delay)
                         continue
@@ -318,7 +356,10 @@ class RotatingCredentialsMixin:
                     if is_dead_key_error(e) and attempt < limit:
                         self.logger.warning(
                             "Dead key (401/402/403) on key %s (Sync Stream) [%s]. Marking key dead and rotating (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.mark_dead()
                         self.wrapper.manager.force_rotate_index()
@@ -327,7 +368,10 @@ class RotatingCredentialsMixin:
                     if is_rate_limit_error(e) and attempt < limit:
                         self.logger.warning(
                             "429 Hit on key %s (Sync Stream) [%s]. Rotating and retrying (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.trigger_cooldown()
                         self.wrapper.manager.force_rotate_index()
@@ -372,14 +416,19 @@ class RotatingCredentialsMixin:
                     return
                 except Exception as e:
                     # Only retry temp limits if NO chunks received yet
-                    if (is_temporary_rate_limit_error(e)
+                    if (
+                        is_temporary_rate_limit_error(e)
                         and temp_attempt < TEMP_RATE_LIMIT_MAX_RETRIES
-                        and not chunks_received):
+                        and not chunks_received
+                    ):
                         delay = temp_backoff.get_next_interval()
                         self.logger.info(
                             "Temporary rate limit on key %s (Async Stream) [%s]. Waiting %.1fs (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, delay,
-                            temp_attempt + 1, TEMP_RATE_LIMIT_MAX_RETRIES
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            delay,
+                            temp_attempt + 1,
+                            TEMP_RATE_LIMIT_MAX_RETRIES,
                         )
                         await asyncio.sleep(delay)
                         continue
@@ -387,7 +436,10 @@ class RotatingCredentialsMixin:
                     if is_dead_key_error(e) and attempt < limit:
                         self.logger.warning(
                             "Dead key (401/402/403) on key %s (Async Stream) [%s]. Marking key dead and rotating (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.mark_dead()
                         self.wrapper.manager.force_rotate_index()
@@ -396,7 +448,10 @@ class RotatingCredentialsMixin:
                     if is_rate_limit_error(e) and attempt < limit:
                         self.logger.warning(
                             "429 Hit on key %s (Async Stream) [%s]. Rotating and retrying (%d/%d).",
-                            get_key_suffix(self.api_key), self.model_id, attempt + 1, limit
+                            get_key_suffix(self.api_key),
+                            self.model_id,
+                            attempt + 1,
+                            limit,
                         )
                         key_usage.trigger_cooldown()
                         self.wrapper.manager.force_rotate_index()

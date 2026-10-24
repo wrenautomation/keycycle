@@ -1,20 +1,22 @@
 """Shared utility functions for keycycle."""
+
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 from dotenv import load_dotenv
 
 from ..config.constants import KEY_SUFFIX_LENGTH
 
-
 # Type alias for key entries: either a string API key or a dict with params
-KeyEntry = Union[str, Dict[str, Any]]
+KeyEntry = Union[str, dict[str, Any]]
 
 
-def normalize_key_entry(entry: KeyEntry, api_key_param: str = "api_key") -> Tuple[str, Dict[str, Any]]:
+def normalize_key_entry(
+    entry: KeyEntry, api_key_param: str = "api_key"
+) -> tuple[str, dict[str, Any]]:
     """
     Normalize a key entry to (primary_key, params_dict).
 
@@ -39,9 +41,8 @@ def normalize_key_entry(entry: KeyEntry, api_key_param: str = "api_key") -> Tupl
 
 
 def normalize_key_entries(
-    entries: List[KeyEntry],
-    api_key_param: str = "api_key"
-) -> List[Tuple[str, Dict[str, Any]]]:
+    entries: list[KeyEntry], api_key_param: str = "api_key"
+) -> list[tuple[str, dict[str, Any]]]:
     """
     Normalize a list of key entries.
 
@@ -56,47 +57,53 @@ def normalize_key_entries(
 
 
 # Rate limit indicators for detection
-RATE_LIMIT_INDICATORS: FrozenSet[str] = frozenset([
-    "429", "too many requests", "rate limit",
-    "resource exhausted", "traffic", "rate-limited"
-])
+RATE_LIMIT_INDICATORS: frozenset[str] = frozenset(
+    ["429", "too many requests", "rate limit", "resource exhausted", "traffic", "rate-limited"]
+)
 
 # Temporary/transient rate limit indicators - retry with SAME key
-TEMPORARY_RATE_LIMIT_INDICATORS: FrozenSet[str] = frozenset([
-    "temporarily rate-limited",
-    "temporarily unavailable",
-    "high traffic",
-    "retry shortly",
-    "please retry",
-    "try again shortly",
-    "rate-limited upstream",
-    "experiencing high load",
-])
+TEMPORARY_RATE_LIMIT_INDICATORS: frozenset[str] = frozenset(
+    [
+        "temporarily rate-limited",
+        "temporarily unavailable",
+        "high traffic",
+        "retry shortly",
+        "please retry",
+        "try again shortly",
+        "rate-limited upstream",
+        "experiencing high load",
+    ]
+)
 
 # Hard/quota-based rate limit indicators - rotate to different key
-HARD_RATE_LIMIT_INDICATORS: FrozenSet[str] = frozenset([
-    "per-day",
-    "per-hour",
-    "per-minute",
-    "quota exceeded",
-    "daily limit",
-    "hourly limit",
-    "free-models-per-day",
-    "x-ratelimit-remaining: 0",
-])
+HARD_RATE_LIMIT_INDICATORS: frozenset[str] = frozenset(
+    [
+        "per-day",
+        "per-hour",
+        "per-minute",
+        "quota exceeded",
+        "daily limit",
+        "hourly limit",
+        "free-models-per-day",
+        "x-ratelimit-remaining: 0",
+    ]
+)
 
 # Auth error indicators
 AUTH_STATUS_CODES = {401, 403}
-AUTH_INDICATORS: FrozenSet[str] = frozenset([
-    "401", "403", "unauthorized", "forbidden",
-    "invalid api key", "invalid_api_key", "expired"
-])
+AUTH_INDICATORS: frozenset[str] = frozenset(
+    ["401", "403", "unauthorized", "forbidden", "invalid api key", "invalid_api_key", "expired"]
+)
 
 # Payment required indicators (e.g. free-tier quota/credits exhausted)
 PAYMENT_REQUIRED_STATUS_CODES = {402}
-PAYMENT_REQUIRED_INDICATORS: FrozenSet[str] = frozenset([
-    "402", "payment required", "payment_required",
-])
+PAYMENT_REQUIRED_INDICATORS: frozenset[str] = frozenset(
+    [
+        "402",
+        "payment required",
+        "payment_required",
+    ]
+)
 
 
 def get_key_suffix(api_key: str, length: int = KEY_SUFFIX_LENGTH) -> str:
@@ -285,14 +292,20 @@ def validate_api_key(api_key: str) -> bool:
         return False
 
     # Check for common placeholder patterns (exact matches or obvious placeholders)
-    placeholder_patterns = ["your_api_key", "placeholder", "your-api-key", "insert_key", "api_key_here"]
+    placeholder_patterns = [
+        "your_api_key",
+        "placeholder",
+        "your-api-key",
+        "insert_key",
+        "api_key_here",
+    ]
     key_lower = api_key.lower()
     if any(pattern in key_lower for pattern in placeholder_patterns):
         return False
 
     # Check if key is all x's or looks like a template (simplified with regex)
-    stripped = re.sub(r'[-_]|sk', '', key_lower)
-    if stripped and all(c == 'x' for c in stripped):
+    stripped = re.sub(r"[-_]|sk", "", key_lower)
+    if stripped and all(c == "x" for c in stripped):
         return False
 
     return True
@@ -301,9 +314,9 @@ def validate_api_key(api_key: str) -> bool:
 def load_api_keys(
     provider: str,
     env_file: Optional[str] = None,
-    extra_params: Optional[List[str]] = None,
+    extra_params: Optional[list[str]] = None,
     api_key_param: str = "api_key",
-) -> List[KeyEntry]:
+) -> list[KeyEntry]:
     """
     Load API keys from environment variables.
 
@@ -355,7 +368,7 @@ def load_api_keys(
     # the first NUM indices that actually exist and warns if it comes up
     # short, but never loads past NUM keys.
     key_pattern = re.compile(rf"^{re.escape(provider_upper)}_API_KEY_(\d+)$")
-    found: Dict[int, str] = {}
+    found: dict[int, str] = {}
     for env_name, value in os.environ.items():
         match = key_pattern.match(env_name)
         if match and value:
@@ -371,22 +384,31 @@ def load_api_keys(
         logging.getLogger(__name__).info(
             "%s: %s=%d -- using the first %d key indices %s; excluding %d "
             "parked key(s) at indices %s (dead/spare by convention).",
-            provider_upper, num_keys_var, expected_count, len(indices), indices,
-            len(excluded), excluded,
+            provider_upper,
+            num_keys_var,
+            expected_count,
+            len(indices),
+            indices,
+            len(excluded),
+            excluded,
         )
     if len(indices) < expected_count:
         logging.getLogger(__name__).warning(
             "%s: only %d API key(s) found (indices %s) but %s=%d -- the "
             "declared count is stale. Using the %d key(s) actually found.",
-            provider_upper, len(indices), indices, num_keys_var, expected_count,
+            provider_upper,
+            len(indices),
+            indices,
+            num_keys_var,
+            expected_count,
             len(indices),
         )
 
-    keys: List[KeyEntry] = []
+    keys: list[KeyEntry] = []
     for i in indices:
         key = found[i]
         if extra_params:
-            key_dict: Dict[str, Any] = {api_key_param: key}
+            key_dict: dict[str, Any] = {api_key_param: key}
             for param in extra_params:
                 val = os.getenv(f"{provider_upper}_{param.upper()}_{i}")
                 if val:
@@ -398,14 +420,16 @@ def load_api_keys(
 
 
 # Type alias for key limit overrides - can be imported from config.dataclasses
-KeyLimitOverride = Any  # Actually Union[RateLimits, Dict[str, RateLimits]] but avoiding circular import
+KeyLimitOverride = (
+    Any  # Actually Union[RateLimits, Dict[str, RateLimits]] but avoiding circular import
+)
 
 
 def normalize_key_limits(
-    api_keys: List[str],
-    key_limits: Optional[Dict[Union[int, str], KeyLimitOverride]],
+    api_keys: list[str],
+    key_limits: Optional[dict[Union[int, str], KeyLimitOverride]],
     logger: Optional[logging.Logger] = None,
-) -> Dict[str, KeyLimitOverride]:
+) -> dict[str, KeyLimitOverride]:
     """
     Normalize key_limits by converting all identifiers to key suffixes.
 
@@ -425,7 +449,7 @@ def normalize_key_limits(
     if not key_limits:
         return {}
 
-    normalized: Dict[str, KeyLimitOverride] = {}
+    normalized: dict[str, KeyLimitOverride] = {}
 
     for identifier, limits in key_limits.items():
         if isinstance(identifier, int):
@@ -435,8 +459,7 @@ def normalize_key_limits(
                 normalized[suffix] = limits
             elif logger:
                 logger.warning(
-                    "key_limits index %d is out of range (0-%d)",
-                    identifier, len(api_keys) - 1
+                    "key_limits index %d is out of range (0-%d)", identifier, len(api_keys) - 1
                 )
         elif isinstance(identifier, str):
             # String: try exact match first, then suffix match
@@ -449,8 +472,7 @@ def normalize_key_limits(
                     break
             if not matched and logger:
                 logger.warning(
-                    "key_limits identifier '%s' did not match any API key",
-                    identifier[-8:]
+                    "key_limits identifier '%s' did not match any API key", identifier[-8:]
                 )
 
     return normalized
@@ -460,8 +482,8 @@ def resolve_limits(
     model_id: str,
     default_model_id: str,
     key_suffix: Optional[str],
-    key_limits: Dict[str, KeyLimitOverride],
-    model_limits: Dict[str, Dict[str, Any]],
+    key_limits: dict[str, KeyLimitOverride],
+    model_limits: dict[str, dict[str, Any]],
     provider: str,
     default_limits_factory: Callable[[], Any],
 ) -> Any:
@@ -495,9 +517,9 @@ def resolve_limits(
                 if mid in override:
                     return override[mid]
                 # Check for __default__ fallback
-                if '__default__' in override:
-                    return override['__default__']
+                if "__default__" in override:
+                    return override["__default__"]
 
     # Fall back to provider/model defaults
     provider_limits = model_limits.get(provider, {})
-    return provider_limits.get(mid, provider_limits.get('default', default_limits_factory()))
+    return provider_limits.get(mid, provider_limits.get("default", default_limits_factory()))

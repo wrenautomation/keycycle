@@ -1,7 +1,5 @@
 import logging
 import logging.config
-from logging.handlers import RotatingFileHandler
-from rich.logging import RichHandler
 
 LOGGING_CONFIG = {
     "version": 1,
@@ -12,33 +10,30 @@ LOGGING_CONFIG = {
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
-
     "handlers": {
         "console": {
             "class": "rich.logging.RichHandler",
             "level": "DEBUG",
-            "rich_tracebacks": True, # Beautiful traceback formatting
-            "markup": True,          # Allow "[bold]text[/]" inside log messages!
-            "show_path": False       # Cleaner output (hides file path column)
+            "rich_tracebacks": True,  # Beautiful traceback formatting
+            "markup": True,  # Allow "[bold]text[/]" inside log messages!
+            "show_path": False,  # Cleaner output (hides file path column)
         },
-         "file": {
+        "file": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "INFO",
             "formatter": "standard",
             "filename": "app.log",
-            "maxBytes": 10 * 1024 * 1024,   # 10 MiB per file
+            "maxBytes": 10 * 1024 * 1024,  # 10 MiB per file
             "backupCount": 5,
             "encoding": "utf-8",
         },
     },
-    
     "root": {
         "handlers": ["console", "file"],
-        "level": "WARNING", 
+        "level": "WARNING",
     },
-    
     "loggers": {
-       "key_manager": {
+        "key_manager": {
             "handlers": ["console", "file"],
             "level": "DEBUG",
             "propagate": False,
@@ -46,8 +41,10 @@ LOGGING_CONFIG = {
     },
 }
 
+
 def configure_logging():
     logging.config.dictConfig(LOGGING_CONFIG)
+
 
 configure_logging()
 default_logger = logging.getLogger(__name__)

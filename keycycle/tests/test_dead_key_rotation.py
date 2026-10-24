@@ -8,25 +8,26 @@ Such a key must be marked dead and rotated off, never allowed to abort a
 whole run while dozens of healthy keys sit idle (emails_gen pilot,
 2026-09-07).
 """
+
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
-import sys
-import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
-    from keycycle.core.utils import is_dead_key_error
-    from keycycle.config.dataclasses import KeyUsage, RateLimits
-    from keycycle.config.enums import RateLimitStrategy
-    from keycycle.key_rotation.rotation_manager import RotatingKeyManager
     from keycycle.adapters.openai_adapter import RotatingOpenAIClient
+    from keycycle.config.dataclasses import RateLimits
+    from keycycle.config.enums import RateLimitStrategy
+    from keycycle.core.utils import is_dead_key_error
+    from keycycle.key_rotation.rotation_manager import RotatingKeyManager
 except ImportError:
-    from keycycle.keycycle.core.utils import is_dead_key_error
-    from keycycle.keycycle.config.dataclasses import KeyUsage, RateLimits
-    from keycycle.keycycle.config.enums import RateLimitStrategy
-    from keycycle.keycycle.key_rotation.rotation_manager import RotatingKeyManager
     from keycycle.keycycle.adapters.openai_adapter import RotatingOpenAIClient
+    from keycycle.keycycle.config.dataclasses import RateLimits
+    from keycycle.keycycle.config.enums import RateLimitStrategy
+    from keycycle.keycycle.core.utils import is_dead_key_error
+    from keycycle.keycycle.key_rotation.rotation_manager import RotatingKeyManager
 
 
 class MockAPIError(Exception):
@@ -98,12 +99,14 @@ class TestDeadKeyRotation(unittest.TestCase):
                 response.usage.total_tokens = 7
                 fake.chat.completions.create.return_value = response
             return fake
+
         return factory
 
     def test_403_marks_key_dead_and_rotates(self):
-        with patch.object(
-            self.client, "_get_fresh_client", side_effect=self._factory({"AAAAAAAA"})
-        ), patch("keycycle.adapters.openai_adapter.time.sleep"):
+        with (
+            patch.object(self.client, "_get_fresh_client", side_effect=self._factory({"AAAAAAAA"})),
+            patch("keycycle.adapters.openai_adapter.time.sleep"),
+        ):
             result = self.client.chat.completions.create(model="test-model")
 
         self.assertEqual(result.usage.total_tokens, 7)
@@ -111,10 +114,14 @@ class TestDeadKeyRotation(unittest.TestCase):
         self.assertEqual(dead, {"AAAAAAAA"})
 
     def test_all_403_raises_without_hanging(self):
-        with patch.object(
-            self.client, "_get_fresh_client",
-            side_effect=self._factory({"AAAAAAAA", "BBBBBBBB"}),
-        ), patch("keycycle.adapters.openai_adapter.time.sleep"):
+        with (
+            patch.object(
+                self.client,
+                "_get_fresh_client",
+                side_effect=self._factory({"AAAAAAAA", "BBBBBBBB"}),
+            ),
+            patch("keycycle.adapters.openai_adapter.time.sleep"),
+        ):
             with self.assertRaises(Exception):
                 self.client.chat.completions.create(model="test-model")
         self.assertTrue(all(k.dead for k in self.manager.keys))
